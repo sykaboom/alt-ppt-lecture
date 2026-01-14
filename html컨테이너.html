@@ -333,7 +333,7 @@
 
     <div id="page-indicator">1 / 1</div>
     <div id="thumbnail-strip" aria-label="슬라이드 미리보기"></div>
-    <input type="file" id="package-input" accept=".altppt" style="display:none" />
+    <input type="file" id="package-input" accept=".altppt,.zip" style="display:none" />
 
     <script>
         // === 코드 구조 ===
@@ -406,6 +406,68 @@
             const file = slash === -1 ? normalized : normalized.slice(slash + 1);
             const { base, ext } = splitName(file);
             return { dir, base, ext };
+        }
+
+        function parseDataUrl(value) {
+            if (!value || typeof value !== 'string') return null;
+            if (!value.startsWith('data:')) return null;
+            const commaIndex = value.indexOf(',');
+            if (commaIndex === -1) return null;
+            const meta = value.slice(5, commaIndex);
+            const data = value.slice(commaIndex + 1);
+            const parts = meta.split(';').filter(Boolean);
+            const mime = parts[0] || 'application/octet-stream';
+            const isBase64 = parts.includes('base64');
+            return { mime, isBase64, data };
+        }
+
+        function decodeBase64ToUint8Array(base64) {
+            const cleaned = (base64 || '').replace(/\s+/g, '');
+            const binary = atob(cleaned);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function convertEmbeddedImagesInDocument(doc, cache) {
+            if (!doc) return 0;
+            let converted = 0;
+            const images = doc.querySelectorAll('img[src^="data:"]');
+
+            images.forEach((img) => {
+                const src = img.getAttribute('src');
+                const parsed = parseDataUrl(src);
+                if (!parsed || !parsed.isBase64 || !parsed.mime.startsWith('image/')) return;
+
+                if (cache && cache.has(src)) {
+                    img.setAttribute('src', './' + cache.get(src));
+                    converted += 1;
+                    return;
+                }
+
+                try {
+                    const bytes = decodeBase64ToUint8Array(parsed.data);
+                    const blob = new Blob([bytes], { type: parsed.mime });
+                    const assetPath = registerImageAsset(blob, '');
+                    if (cache) cache.set(src, assetPath);
+                    img.setAttribute('src', './' + assetPath);
+                    converted += 1;
+                } catch (err) {
+                    // 변환 실패 시 원본 data URL 유지
+                }
+            });
+
+            return converted;
+        }
+
+        function convertBase64ImagesInHtml(htmlText, cache) {
+            if (!htmlText) return { html: htmlText, converted: 0 };
+            const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+            const converted = convertEmbeddedImagesInDocument(doc, cache);
+            if (!converted) return { html: htmlText, converted: 0 };
+            return { html: doc.documentElement.outerHTML, converted };
         }
 
         function stripExtensionFromName(name, extension) {
@@ -703,19 +765,37 @@
             state.selectedImage = null;
             state.imageCounter = 1;
             state.fileCounter = 1;
+            const embeddedImageCache = new Map();
+            let legacyConvertedCount = 0;
 
             for (const [name, data] of files.entries()) {
                 if (name === main.name) continue;
                 const blob = new Blob([data], { type: guessMimeType(name) });
-                state.packageFiles.set(name, blob);
+
                 if (name.toLowerCase().endsWith('.html') || name.toLowerCase().endsWith('.htm')) {
-                    blob.text().then(registerRequiredAssetsFromHtml).catch(() => {});
+                    try {
+                        const text = await blob.text();
+                        const converted = convertBase64ImagesInHtml(text, embeddedImageCache);
+                        if (converted.converted > 0) {
+                            legacyConvertedCount += converted.converted;
+                            state.packageFiles.set(name, new Blob([converted.html], { type: 'text/html' }));
+                            registerRequiredAssetsFromHtml(converted.html);
+                        } else {
+                            state.packageFiles.set(name, blob);
+                            registerRequiredAssetsFromHtml(text);
+                        }
+                    } catch (err) {
+                        state.packageFiles.set(name, blob);
+                    }
+                } else {
+                    state.packageFiles.set(name, blob);
                 }
             }
 
-            registerRequiredAssetsFromHtml(main.html);
-
             const parsedDoc = new DOMParser().parseFromString(main.html, 'text/html');
+            legacyConvertedCount += convertEmbeddedImagesInDocument(parsedDoc, embeddedImageCache);
+            const updatedMainHtml = parsedDoc.documentElement.outerHTML;
+            registerRequiredAssetsFromHtml(updatedMainHtml);
             const parsedStage = parsedDoc.querySelector('#slide-stage');
             if (!parsedStage) {
                 alert("슬라이드 데이터를 찾지 못했습니다.");
@@ -779,6 +859,10 @@
             renderThumbnails();
             showSaveButton();
             resizeStage();
+
+            if (legacyConvertedCount > 0) {
+                alert(`레거시 base64 이미지 ${legacyConvertedCount}개를 에셋으로 변환했습니다.\n저장하면 최신 패키지로 정리됩니다.`);
+            }
         }
 
         // === 썸네일 ===
@@ -1220,7 +1304,7 @@
 
             for (const file of files) {
                 const fileName = (file.name || '').toLowerCase();
-                if (fileName.endsWith(`.${CONFIG.PACKAGE_EXTENSION}`)) {
+                if (fileName.endsWith(`.${CONFIG.PACKAGE_EXTENSION}`) || fileName.endsWith('.zip')) {
                     loadPackageFromFile(file);
                     return;
                 }
