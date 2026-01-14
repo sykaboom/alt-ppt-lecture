@@ -146,6 +146,7 @@
         }
         button:hover { background: #666; }
         #save-btn { background: #28a745; border-color: #28a745; display: none; } 
+        #save-as-btn { background: #17a2b8; border-color: #17a2b8; display: none; }
         #fs-btn { background: #007bff; border-color: #007bff; }
 
         /* [UI] 페이지 번호 */
@@ -314,7 +315,8 @@
         <button onclick="deleteCurrentSlide()">현재 슬라이드 삭제</button>
         <button onclick="deleteSelectedImage()">삭제 (Del)</button>
         <button onclick="triggerPackageLoad()">📂 패키지 열기</button>
-        <button id="save-btn" onclick="savePackage()">📦 패키지 저장</button>
+        <button id="save-btn" onclick="savePackage()">💾 저장</button>
+        <button id="save-as-btn" onclick="savePackageAs()">📄 다른 이름으로 저장</button>
     </div>
 
     <!-- 슬라이드 스테이지 (1280x720 고정 비율) -->
@@ -352,6 +354,7 @@
         const dom = {
             indicator: document.getElementById('page-indicator'),
             saveBtn: document.getElementById('save-btn'),
+            saveAsBtn: document.getElementById('save-as-btn'),
             thumbnailStrip: document.getElementById('thumbnail-strip'),
             packageInput: document.getElementById('package-input'),
             stage: document.getElementById('slide-stage')
@@ -1512,7 +1515,10 @@
         }
         function showSaveButton() {
             dom.saveBtn.style.display = 'block';
-            dom.saveBtn.textContent = '📦 패키지 저장';
+            dom.saveBtn.textContent = '💾 저장';
+            if (dom.saveAsBtn) {
+                dom.saveAsBtn.style.display = 'block';
+            }
             scheduleThumbnailRefresh();
         }
 
@@ -1627,7 +1633,11 @@
             return new Blob(parts, { type: 'application/zip' });
         }
         
-        async function savePackage() {
+        function savePackageAs() {
+            savePackage({ forceSaveAs: true });
+        }
+
+        async function savePackage(options = {}) {
             deselectImage(); 
 
             const missingAssets = getMissingAssets();
@@ -1637,6 +1647,7 @@
                 const proceed = confirm(`다음 리소스가 패키지에 없습니다:\n${preview}${more}\n\nShift/Alt 드래그로 지원 파일만 추가할 수 있습니다.\n그래도 저장할까요?`);
                 if (!proceed) return;
             }
+            const forceSaveAs = options.forceSaveAs === true;
 
             const clone = document.documentElement.cloneNode(true);
             const iframes = clone.querySelectorAll('iframe');
@@ -1664,7 +1675,7 @@
             const timeString = `${date.getHours()}시${date.getMinutes()}분`;
             const defaultBaseName = `Presentation_Package_${timeString}`;
             const defaultPackageName = `${defaultBaseName}.${CONFIG.PACKAGE_EXTENSION}`;
-            let packageHandle = state.lastSaveHandle;
+            let packageHandle = forceSaveAs ? null : state.lastSaveHandle;
             let packageFileName = ensurePackageExtension(state.lastPackageFileName) || defaultPackageName;
             if (!packageFileName) packageFileName = defaultPackageName;
 
