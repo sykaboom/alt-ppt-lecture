@@ -367,7 +367,9 @@
             imageCounter: 1,
             fileCounter: 1,
             clipboardImage: null,
-            thumbnailRefreshPending: false
+            thumbnailRefreshPending: false,
+            lastSaveHandle: null,
+            lastPackageFileName: ''
         };
 
         function refreshSlides() {
@@ -502,6 +504,16 @@
                 .filter(part => part !== '.' && part !== '..')
                 .map(part => part.replace(/[<>:"|?*]/g, '_'));
             return safeParts.join('/');
+        }
+
+        function ensurePackageExtension(name) {
+            const safeName = sanitizeFileName(name || '');
+            if (!safeName) return '';
+            const lower = safeName.toLowerCase();
+            const ext = `.${CONFIG.PACKAGE_EXTENSION}`;
+            if (lower.endsWith(ext)) return safeName;
+            const { base } = splitName(safeName);
+            return `${base}${ext}`;
         }
 
         function uniquePath(path) {
@@ -765,6 +777,8 @@
             state.selectedImage = null;
             state.imageCounter = 1;
             state.fileCounter = 1;
+            state.lastSaveHandle = null;
+            state.lastPackageFileName = ensurePackageExtension(file.name || '');
             const embeddedImageCache = new Map();
             let legacyConvertedCount = 0;
 
@@ -1650,20 +1664,27 @@
             const timeString = `${date.getHours()}시${date.getMinutes()}분`;
             const defaultBaseName = `Presentation_Package_${timeString}`;
             const defaultPackageName = `${defaultBaseName}.${CONFIG.PACKAGE_EXTENSION}`;
-            let packageFileName = defaultPackageName;
-            let packageHandle = null;
+            let packageHandle = state.lastSaveHandle;
+            let packageFileName = ensurePackageExtension(state.lastPackageFileName) || defaultPackageName;
+            if (!packageFileName) packageFileName = defaultPackageName;
 
-            try {
-                if (window.showSaveFilePicker) {
-                    packageHandle = await window.showSaveFilePicker({
-                        suggestedName: defaultPackageName,
-                        types: [{ description: `Package (*.${CONFIG.PACKAGE_EXTENSION})`, accept: { 'application/zip': [`.${CONFIG.PACKAGE_EXTENSION}`] } }],
-                    });
-                    if (packageHandle && packageHandle.name) {
-                        packageFileName = packageHandle.name;
+            if (!packageHandle) {
+                try {
+                    if (window.showSaveFilePicker) {
+                        packageHandle = await window.showSaveFilePicker({
+                            suggestedName: packageFileName,
+                            types: [{ description: `Package (*.${CONFIG.PACKAGE_EXTENSION})`, accept: { 'application/zip': [`.${CONFIG.PACKAGE_EXTENSION}`] } }],
+                        });
+                        if (packageHandle && packageHandle.name) {
+                            packageFileName = packageHandle.name;
+                        }
+                        state.lastSaveHandle = packageHandle;
+                        state.lastPackageFileName = packageFileName;
                     }
-                }
-            } catch (err) { console.log(err); }
+                } catch (err) { console.log(err); }
+            } else if (packageHandle.name) {
+                packageFileName = packageHandle.name;
+            }
 
             const baseTitle = stripExtensionFromName(packageFileName, CONFIG.PACKAGE_EXTENSION) || defaultBaseName;
             let mainFileName = `${baseTitle}.html`;
@@ -1673,6 +1694,7 @@
 
             applyTitleToClone(clone, baseTitle);
             document.title = baseTitle;
+            state.lastPackageFileName = packageFileName;
             const htmlContent = clone.outerHTML;
 
             const entries = [{ name: mainFileName, data: textEncoder.encode(htmlContent) }];
