@@ -16,21 +16,22 @@
             user-select: none; 
             height: 100vh;
             width: 100vw;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            position: relative; /* Flex 제거하고 absolute 위치 지정을 위해 relative */
         }
 
-        /* [슬라이드 스테이지] - 핵심: 고정 해상도 (1280x720) */
-        /* 화면 크기에 따라 transform: scale()로 조절됨 */
+        /* [슬라이드 스테이지] - 수정됨: Absolute Centering */
         #slide-stage {
-            width: 1280px;  /* 기준 너비 */
-            height: 720px; /* 기준 높이 (16:9) */
+            /* 초기값은 16:9 */
+            width: 1280px;
+            height: 720px;
             background-color: white;
-            position: relative;
-            box-shadow: 0 0 50px rgba(0,0,0,0.5); /* 그림자 */
-            transform-origin: center center; /* 중앙 기준 확대/축소 */
-            overflow: hidden; /* 슬라이드 밖으로 나간 내용 숨김 */
+            position: absolute; /* 절대 위치 */
+            top: 50%; left: 50%; /* 화면 중앙 기준 */
+            /* transform은 JS에서 제어: translate(-50%, -50%) scale(...) */
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+            transform-origin: center center;
+            transition: width 0.3s, height 0.3s; /* 비율 변경 시 애니메이션 */
         }
 
         /* 드래그 앤 드롭 활성화 시 효과 (스테이지에 적용) */
@@ -84,7 +85,6 @@
         }
 
         /* [외부 HTML - iframe] 창 안의 창 스타일 */
-        /* 슬라이드 크기(1280x720) 기준으로 배치 */
         .iframe-container {
             width: 100%; 
             height: 100%;
@@ -132,22 +132,26 @@
             z-index: 9999;
             display: flex;
             gap: 10px;
+            flex-wrap: wrap; /* 작은 화면에서 줄바꿈 허용 */
+            justify-content: flex-end;
             transition: opacity 0.3s;
         }
         button {
-            padding: 10px 20px;
+            padding: 8px 16px;
             background: #444;
             color: white;
             border: 1px solid #666;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            white-space: nowrap;
         }
         button:hover { background: #666; }
         #save-btn { background: #28a745; border-color: #28a745; display: none; } 
         #save-as-btn { background: #17a2b8; border-color: #17a2b8; display: none; }
         #fs-btn { background: #007bff; border-color: #007bff; }
+        .mode-btn { background: #e0a800; border-color: #d39e00; color: #fff; }
 
         /* [UI] 페이지 번호 */
         #page-indicator {
@@ -217,12 +221,14 @@
         }
 
         .thumbnail-inner {
+            /* 썸네일 내부도 JS에서 크기 조절 예정 */
             width: 1280px;
             height: 720px;
             transform: scale(0.15);
             transform-origin: top left;
             pointer-events: none;
             position: relative;
+            background: white;
         }
 
         .thumbnail .slide {
@@ -252,7 +258,7 @@
             border-radius: 10px;
         }
 
-        /* [네비게이션] 양쪽 영역 (화면 전체 높이) */
+        /* [네비게이션] 양쪽 영역 */
         .nav-zone {
             position: fixed;
             top: 0;
@@ -297,7 +303,7 @@
         }
         
         body.is-fullscreen {
-            background-color: black; /* 발표 시엔 완전 검정 */
+            background-color: black; 
         }
 
     </style>
@@ -310,25 +316,27 @@
 
     <!-- 상단 UI 컨트롤 -->
     <div id="ui-controls">
+        <button id="ratio-btn" class="mode-btn" onclick="toggleAspectRatio()">비율: 16:9</button>
+        <button id="fit-btn" class="mode-btn" onclick="toggleDisplayMode()">화면: 맞춤</button>
         <button id="fs-btn" onclick="startPresentation()">🖥️ 발표 시작</button>
+        <div style="width: 10px;"></div>
         <button onclick="addNewSlide()">+ 새 슬라이드</button>
-        <button onclick="deleteCurrentSlide()">현재 슬라이드 삭제</button>
-        <button onclick="deleteSelectedImage()">삭제 (Del)</button>
-        <button onclick="triggerPackageLoad()">📂 패키지 열기</button>
+        <button onclick="deleteCurrentSlide()">현재 삭제</button>
+        <button onclick="deleteSelectedImage()">요소 삭제(Del)</button>
+        <button onclick="triggerPackageLoad()">📂 열기</button>
         <button id="save-btn" onclick="savePackage()">💾 저장</button>
-        <button id="save-as-btn" onclick="savePackageAs()">📄 다른 이름으로 저장</button>
+        <button id="save-as-btn" onclick="savePackageAs()">📄 다른 이름 저장</button>
     </div>
 
-    <!-- 슬라이드 스테이지 (1280x720 고정 비율) -->
+    <!-- 슬라이드 스테이지 -->
     <div id="slide-stage">
         <!-- [1페이지] -->
         <div class="slide active">
             <div class="guide-text">
-                <h1>16:9 고정 캔버스</h1>
+                <h1>프레젠테이션 캔버스</h1>
                 <p>이제 PPT처럼 작업하세요.</p>
-                <p>이 흰색 박스가 <b>슬라이드 영역</b>입니다.</p>
-                <p>이미지와 HTML 파일을 드래그하면 <b>패키지로 저장</b>됩니다.</p>
-                <p>Shift/Alt 드래그는 <b>지원 파일만 추가</b>합니다.</p>
+                <p>위 버튼으로 <b>16:9</b> 또는 <b>4:3</b> 비율을 설정하세요.</p>
+                <p>이미지와 HTML 파일을 드래그하여 패키지로 저장할 수 있습니다.</p>
             </div>
         </div>
     </div>
@@ -340,12 +348,12 @@
     <script>
         // === 코드 구조 ===
         // 상태/DOM 참조 -> 유틸 -> 에셋/패키지 -> 썸네일 -> 슬라이드/스케일
-        // 입력/드래그 -> 요소 생성 -> 저장/로드 -> 전체화면 -> 초기화
 
-        // === 상태/DOM 참조 ===
         const CONFIG = {
-            STAGE_WIDTH: 1280,
-            STAGE_HEIGHT: 720,
+            STAGE_WIDTH_16_9: 1280,
+            STAGE_HEIGHT_16_9: 720,
+            STAGE_WIDTH_4_3: 1024,
+            STAGE_HEIGHT_4_3: 768,
             IMAGE_DIR: 'assets',
             PACKAGE_EXTENSION: 'altppt',
             THUMB_SCALE: 0.15
@@ -357,11 +365,14 @@
             saveAsBtn: document.getElementById('save-as-btn'),
             thumbnailStrip: document.getElementById('thumbnail-strip'),
             packageInput: document.getElementById('package-input'),
-            stage: document.getElementById('slide-stage')
+            stage: document.getElementById('slide-stage'),
+            ratioBtn: document.getElementById('ratio-btn'),
+            fitBtn: document.getElementById('fit-btn')
         };
 
         const state = {
-            currentScale: 1, // 현재 화면 배율
+            currentScaleX: 1,
+            currentScaleY: 1,
             currentSlideIndex: 0,
             slides: dom.stage.querySelectorAll('.slide'),
             selectedImage: null,
@@ -372,7 +383,13 @@
             clipboardImage: null,
             thumbnailRefreshPending: false,
             lastSaveHandle: null,
-            lastPackageFileName: ''
+            lastPackageFileName: '',
+            
+            // [NEW] 화면 설정 상태
+            aspectRatio: '16:9', // '16:9' | '4:3'
+            displayMode: 'fit',  // 'fit' | 'stretch'
+            currentStageWidth: CONFIG.STAGE_WIDTH_16_9,
+            currentStageHeight: CONFIG.STAGE_HEIGHT_16_9
         };
 
         function refreshSlides() {
@@ -389,6 +406,93 @@
             if (!slide) return;
             const guideText = slide.querySelector('.guide-text');
             if (guideText) guideText.remove();
+        }
+
+        // === 화면 모드 / 비율 제어 (핵심 수정 사항) ===
+        
+        function updateStageDimensions() {
+            if (state.aspectRatio === '16:9') {
+                state.currentStageWidth = CONFIG.STAGE_WIDTH_16_9;
+                state.currentStageHeight = CONFIG.STAGE_HEIGHT_16_9;
+            } else {
+                state.currentStageWidth = CONFIG.STAGE_WIDTH_4_3;
+                state.currentStageHeight = CONFIG.STAGE_HEIGHT_4_3;
+            }
+            dom.stage.style.width = `${state.currentStageWidth}px`;
+            dom.stage.style.height = `${state.currentStageHeight}px`;
+            
+            dom.ratioBtn.textContent = `비율: ${state.aspectRatio}`;
+            
+            // 썸네일 다시 그리기 (비율 변경 반영)
+            renderThumbnails();
+            resizeStage();
+        }
+
+        function toggleAspectRatio() {
+            state.aspectRatio = state.aspectRatio === '16:9' ? '4:3' : '16:9';
+            updateStageDimensions();
+        }
+
+        function toggleDisplayMode() {
+            state.displayMode = state.displayMode === 'fit' ? 'stretch' : 'fit';
+            dom.fitBtn.textContent = state.displayMode === 'fit' ? '화면: 맞춤' : '화면: 채움';
+            resizeStage();
+        }
+
+        // === 스테이지 스케일링 (수정됨) ===
+        function resizeStage() {
+            const stage = dom.stage;
+            
+            // 화면 크기 계산 (전체화면일 때는 window 전체, 아니면 여백 제외)
+            const isFullscreen = document.body.classList.contains('is-fullscreen');
+            
+            let availableWidth = window.innerWidth;
+            let availableHeight = window.innerHeight;
+            let offsetY = 0;
+
+            if (!isFullscreen) {
+                // 편집 모드 여백
+                availableWidth -= 40; 
+                availableHeight -= 40;
+                
+                if (dom.thumbnailStrip) {
+                    const reserve = dom.thumbnailStrip.offsetHeight + 30;
+                    availableHeight -= reserve;
+                    // 상단으로 조금 이동시켜서 편집 공간 확보
+                    offsetY = -(reserve / 2);
+                }
+            }
+
+            const targetW = state.currentStageWidth;
+            const targetH = state.currentStageHeight;
+
+            const scaleX = availableWidth / targetW;
+            const scaleY = availableHeight / targetH;
+
+            let finalScaleX, finalScaleY;
+
+            if (state.displayMode === 'stretch') {
+                // [채움 모드] 비율 무시하고 꽉 채움
+                finalScaleX = scaleX;
+                finalScaleY = scaleY;
+                offsetY = 0; // 채움 모드에서는 중앙 정렬만 신경씀
+            } else {
+                // [맞춤 모드] 비율 유지 (Fit)
+                const fitScale = Math.min(scaleX, scaleY);
+                finalScaleX = fitScale;
+                finalScaleY = fitScale;
+            }
+
+            // 아주 작은 화면에서의 최소 스케일 방어 (너무 작아지지 않게)
+            if (finalScaleX < 0.1) finalScaleX = 0.1;
+            if (finalScaleY < 0.1) finalScaleY = 0.1;
+
+            state.currentScaleX = finalScaleX;
+            state.currentScaleY = finalScaleY;
+            
+            // [중요] translate(-50%, -50%)를 먼저 적용해 요소를 정중앙으로 이동시킨 후 스케일 적용
+            // offsetY는 편집모드에서 썸네일 공간 때문에 살짝 위로 올리는 용도
+            stage.style.transform = `translate(-50%, calc(-50% + ${offsetY}px)) scale(${finalScaleX}, ${finalScaleY})`;
         }
 
         // === 경로/파일 유틸 ===
@@ -459,9 +563,7 @@
                     if (cache) cache.set(src, assetPath);
                     img.setAttribute('src', './' + assetPath);
                     converted += 1;
-                } catch (err) {
-                    // 변환 실패 시 원본 data URL 유지
-                }
+                } catch (err) { }
             });
 
             return converted;
@@ -819,6 +921,15 @@
                 return;
             }
 
+            // 비율 감지 로직 (불러온 파일의 stage 크기 확인)
+            const loadedWidth = parseInt(parsedStage.style.width) || 1280;
+            if (loadedWidth < 1100) {
+                state.aspectRatio = '4:3';
+            } else {
+                state.aspectRatio = '16:9';
+            }
+            updateStageDimensions();
+
             const parsedTitle = (parsedDoc.title || '').trim();
             const mainTitle = stripExtensionFromName(main.name, 'html');
             const fallbackTitle = stripExtensionFromName(file.name, CONFIG.PACKAGE_EXTENSION);
@@ -898,6 +1009,16 @@
             const slides = refreshSlides();
             dom.thumbnailStrip.innerHTML = '';
 
+            // 썸네일 스케일 재계산 (썸네일 박스 크기는 고정 192x108 이므로 비율에 맞춰 내부 스케일 조정)
+            // 16:9 (1280x720) -> 192x108 (0.15배)
+            // 4:3 (1024x768) -> 192x108 (가로는 0.1875, 세로는 0.14) -> fit을 위해 0.14 사용 + 좌우 여백
+            
+            const thumbW = 192;
+            const thumbH = 108;
+            const scaleX = thumbW / state.currentStageWidth;
+            const scaleY = thumbH / state.currentStageHeight;
+            const thumbScale = Math.min(scaleX, scaleY);
+
             slides.forEach((slide, index) => {
                 const thumb = document.createElement('div');
                 thumb.className = 'thumbnail';
@@ -907,7 +1028,16 @@
 
                 const inner = document.createElement('div');
                 inner.className = 'thumbnail-inner';
-                inner.style.transform = `scale(${CONFIG.THUMB_SCALE})`;
+                
+                // 썸네일 내부 사이즈도 스테이지 실제 사이즈와 동일하게 설정
+                inner.style.width = `${state.currentStageWidth}px`;
+                inner.style.height = `${state.currentStageHeight}px`;
+                
+                // 중앙 정렬을 위한 translate
+                const tx = (thumbW - (state.currentStageWidth * thumbScale)) / 2;
+                const ty = (thumbH - (state.currentStageHeight * thumbScale)) / 2;
+                inner.style.transform = `translate(${tx}px, ${ty}px) scale(${thumbScale})`;
+                inner.style.transformOrigin = 'top left';
 
                 const clone = slide.cloneNode(true);
                 clone.classList.remove('active');
@@ -1041,38 +1171,6 @@
             createDraggableImageFromAsset(state.clipboardImage.assetPath, state.clipboardImage);
         }
 
-        // === 스테이지 스케일링 ===
-        function resizeStage() {
-            const stage = dom.stage;
-            
-            // 화면 크기 대비 스테이지 비율 계산 (여백 40px 정도 확보)
-            const availableWidth = window.innerWidth - 40;
-            let availableHeight = window.innerHeight - 40;
-            const isFullscreen = document.body.classList.contains('is-fullscreen');
-            let offsetY = 0;
-            if (!isFullscreen && dom.thumbnailStrip) {
-                const reserve = dom.thumbnailStrip.offsetHeight + 30;
-                availableHeight -= reserve;
-                offsetY = -(reserve / 2);
-            }
-
-            const scaleX = availableWidth / CONFIG.STAGE_WIDTH;
-            const scaleY = availableHeight / CONFIG.STAGE_HEIGHT;
-
-            // 더 작은 배율을 따라가서 화면에 꽉 차게(Fit) 맞춤
-            let scale = Math.min(scaleX, scaleY);
-            
-            // 발표 모드일 때는 여백 없이 꽉 채움
-            if (isFullscreen) {
-                const fullScaleX = window.innerWidth / CONFIG.STAGE_WIDTH;
-                const fullScaleY = window.innerHeight / CONFIG.STAGE_HEIGHT;
-                scale = Math.min(fullScaleX, fullScaleY);
-            }
-
-            state.currentScale = scale;
-            stage.style.transform = `translateY(${offsetY}px) scale(${scale})`;
-        }
-
         // === 초기화 ===
         function init() {
             bindEvents();
@@ -1127,6 +1225,7 @@
                 state.currentSlideIndex = Math.min(state.currentSlideIndex + 1, updatedSlides.length - 1);
                 updateSlideVisibility();
                 showSaveButton();
+                renderThumbnails();
             }, 50);
         }
 
@@ -1188,6 +1287,7 @@
             htmlAssets.forEach(removeHtmlAssetIfUnused);
             updateSlideVisibility();
             showSaveButton();
+            renderThumbnails();
         }
 
         // === 입력/네비게이션 이벤트 ===
@@ -1412,9 +1512,11 @@
 
             const wrapper = document.createElement('div');
             wrapper.className = 'draggable-img selected'; 
-            // 중앙에 배치 (1280x720 기준)
-            wrapper.style.left = '400px'; 
-            wrapper.style.top = '200px';
+            // 중앙에 배치
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            wrapper.style.left = (cw - 240) + 'px';
+            wrapper.style.top = (ch - 150) + 'px';
             wrapper.style.width = '480px'; 
 
             const img = document.createElement('img');
@@ -1447,15 +1549,13 @@
                 const startX = e.clientX; 
                 const startY = e.clientY;
                 
-                // 현재 요소의 left/top 값 (px)
                 const startLeft = parseFloat(element.style.left || 0);
                 const startTop = parseFloat(element.style.top || 0);
 
                 function onMouseMove(e) {
-                    // [중요] 마우스 이동거리를 현재 배율(state.currentScale)로 나눠야
-                    // 실제 1280x720 좌표계에서의 이동거리가 나옴
-                    const dx = (e.clientX - startX) / state.currentScale;
-                    const dy = (e.clientY - startY) / state.currentScale;
+                    // 스케일 보정 - X, Y가 다를 수 있음
+                    const dx = (e.clientX - startX) / state.currentScaleX;
+                    const dy = (e.clientY - startY) / state.currentScaleY;
 
                     element.style.left = (startLeft + dx) + 'px';
                     element.style.top = (startTop + dy) + 'px';
@@ -1479,8 +1579,7 @@
                 const aspectRatio = startWidth / startHeight;
 
                 function onMouseMove(e) {
-                    // [중요] 리사이즈도 스케일 보정 필요
-                    const dx = (e.clientX - startX) / state.currentScale;
+                    const dx = (e.clientX - startX) / state.currentScaleX;
                     const newWidth = startWidth + dx;
                     
                     if (newWidth > 50) {
@@ -1758,8 +1857,6 @@
             resizeStage(); // 상태 변경 시 크기 재계산 (여백 제거/복구)
         }
         
-        // F11 포함 resize는 상단 resize 이벤트에서 처리됨.
-
     </script>
 </body>
 </html>
