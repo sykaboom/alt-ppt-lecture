@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>alt-ppt4lecture 함수 설명 지도</title>
+  <style>
+    :root {
+      --bg: #f7f1e8;
+      --bg-strong: #efe4d2;
+      --card: #fffdf8;
+      --ink: #221f1a;
+      --muted: #5d554a;
+      --accent: #c65a1c;
+      --accent-2: #2f6f5f;
+      --line: #d8cbb8;
+      --shadow: 0 10px 30px rgba(34, 31, 26, 0.12);
+      --radius: 18px;
+      --sans: "IBM Plex Sans", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      --serif: "Source Serif 4", "Noto Serif KR", "Nanum Myeongjo", serif;
+      --mono: "IBM Plex Mono", "JetBrains Mono", "Fira Code", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      line-height: 1.6;
+      background:
+        radial-gradient(900px 420px at 8% 10%, rgba(244, 210, 170, 0.5), transparent 65%),
+        radial-gradient(700px 360px at 92% 0%, rgba(152, 200, 184, 0.4), transparent 60%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-strong) 100%);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(rgba(34, 31, 26, 0.06) 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .hero {
+      padding: 3.5rem 1.5rem 2.6rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 1rem;
+      animation: fadeIn 0.8s ease both;
+    }
+
+    .eyebrow {
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .hero h1 {
+      font-family: var(--serif);
+      font-size: clamp(2.1rem, 3vw + 1.5rem, 3.6rem);
+      margin: 0;
+    }
+
+    .lead {
+      margin: 0;
+      font-size: 1.05rem;
+      max-width: 70ch;
+      color: var(--muted);
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+
+    .pill {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.85rem;
+      box-shadow: 0 6px 16px rgba(34, 31, 26, 0.08);
+    }
+
+    .layout {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem 4rem;
+      display: grid;
+      gap: 2rem;
+      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    }
+
+    .toc {
+      position: sticky;
+      top: 1.5rem;
+      align-self: start;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.2rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+      animation: rise 0.6s ease both;
+    }
+
+    .toc h2 {
+      margin: 0 0 0.6rem;
+      font-size: 1.1rem;
+    }
+
+    .toc a {
+      display: block;
+      margin: 0.35rem 0;
+      color: var(--ink);
+      font-size: 0.95rem;
+    }
+
+    .toc-section {
+      margin-top: 1.2rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .content > section + section { margin-top: 2rem; }
+
+    .section-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      animation: rise 0.6s ease both;
+    }
+
+    .section-card h2 {
+      margin: 0 0 0.6rem;
+      font-family: var(--serif);
+      font-size: 1.6rem;
+    }
+
+    .section-note {
+      margin-top: -0.25rem;
+      color: var(--muted);
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-top: 1.2rem;
+    }
+
+    .module-card {
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 6px 18px rgba(34, 31, 26, 0.08);
+    }
+
+    .module-card h3 {
+      margin: 0 0 0.4rem;
+      font-family: var(--serif);
+      font-size: 1.2rem;
+    }
+
+    .module-card .why {
+      margin: 0.4rem 0 0.8rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .fn-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .fn-tag {
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      color: var(--accent);
+      border: 1px solid rgba(198, 90, 28, 0.25);
+      background: rgba(198, 90, 28, 0.1);
+    }
+
+    .group {
+      margin-top: 2rem;
+    }
+
+    .group h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 1.4rem;
+    }
+
+    .group p {
+      color: var(--muted);
+      margin: 0.3rem 0 0.8rem;
+    }
+
+    .fn-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+
+    .fn-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      box-shadow: 0 6px 16px rgba(34, 31, 26, 0.08);
+      animation: rise 0.6s ease both;
+    }
+
+    .fn-card h4 {
+      margin: 0 0 0.4rem;
+      font-size: 1rem;
+    }
+
+    .fn-card code {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      background: rgba(198, 90, 28, 0.08);
+      padding: 0.1rem 0.4rem;
+      border-radius: 6px;
+    }
+
+    .fn-card p {
+      margin: 0.4rem 0;
+      color: var(--muted);
+    }
+
+    .fn-card ul {
+      padding-left: 1.1rem;
+      margin: 0.4rem 0 0;
+    }
+
+    .fn-card li { margin-bottom: 0.3rem; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      padding: 2.5rem 1rem 3.5rem;
+      font-size: 0.9rem;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .toc { position: static; }
+    }
+
+    @media (max-width: 600px) {
+      .hero { padding: 2.5rem 1.2rem 2rem; }
+      .pill { font-size: 0.75rem; }
+      .section-card { padding: 1.2rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero" id="top">
+    <div class="hero-inner">
+      <p class="eyebrow">alt-ppt4lecture</p>
+      <h1>함수 설명 지도</h1>
+      <p class="lead">
+        이 문서는 긴 코드에서 LLM이 실수하지 않도록, 함수의 역할과 호출 이유를 한눈에 보이게 정리한 지도입니다.
+        앞으로 리팩토링을 할 때도, 어디를 안전하게 손대야 하는지 판단할 기준점이 됩니다.
+      </p>
+      <div class="pill-row">
+        <span class="pill">대상 파일: alt-ppt4lecture.html</span>
+        <span class="pill">총 함수 수: 72개 (내부 함수 2개 포함)</span>
+        <span class="pill">목적: 유지보수 오류 방지</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <nav class="toc">
+      <h2>목차</h2>
+      <a href="#intro">왜 이 지도가 필요한가</a>
+      <a href="#refactor">정리 추천</a>
+      <a href="#map">함수 지도</a>
+      <div class="toc-section">카테고리</div>
+      <a href="#group-basics">기초 상태</a>
+      <a href="#group-stage">화면 비율과 스케일</a>
+      <a href="#group-utils">경로 및 파일 유틸</a>
+      <a href="#group-assets">에셋 등록</a>
+      <a href="#group-package">패키지 로드</a>
+      <a href="#group-thumbs">썸네일</a>
+      <a href="#group-clipboard">클립보드</a>
+      <a href="#group-init">초기화</a>
+      <a href="#group-slides">슬라이드 관리</a>
+      <a href="#group-events">이벤트 바인딩</a>
+      <a href="#group-drop">드롭과 HTML</a>
+      <a href="#group-images">이미지 생성과 드래그</a>
+      <a href="#group-selection">선택과 삭제</a>
+      <a href="#group-save">저장과 ZIP</a>
+      <a href="#group-fullscreen">전체화면</a>
+    </nav>
+
+    <div class="content">
+      <section id="intro" class="section-card">
+        <h2>왜 이 지도가 필요한가</h2>
+        <p class="section-note">
+          길이가 긴 단일 HTML은 작은 수정에도 실수가 생기기 쉬워집니다. 특히 바이브 코딩에서는
+          함수들의 역할과 경계가 흐려지면 오류가 늘어납니다.
+        </p>
+        <ul>
+          <li>기능 단위를 고정하면, LLM이 수정할 범위를 명확히 정할 수 있습니다.</li>
+          <li>각 함수의 목적이 명확하면, 잘못된 수정이나 중복 로직을 줄일 수 있습니다.</li>
+          <li>리팩토링 전에도 이 지도만 있으면 유지보수 판단이 빨라집니다.</li>
+        </ul>
+      </section>
+
+      <section id="refactor" class="section-card">
+        <h2>정리 추천</h2>
+        <p class="section-note">
+          아래는 나중에 리팩토링할 때 사용할 수 있는 이름과 묶음입니다.
+          각 묶음은 책임이 겹치지 않게 나눴고, 실수 가능성을 줄이기 위해 추천합니다.
+        </p>
+        <div class="module-grid">
+          <article class="module-card">
+            <h3>StageController</h3>
+            <p>비율, 스케일, 전체화면을 한 덩어리로 관리합니다.</p>
+            <p class="why">왜 추천: 화면 크기와 배율 계산은 서로 의존적이라 분리하면 실수 확률이 큽니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">updateStageDimensions()</span>
+              <span class="fn-tag">toggleAspectRatio()</span>
+              <span class="fn-tag">toggleDisplayMode()</span>
+              <span class="fn-tag">resizeStage()</span>
+              <span class="fn-tag">startPresentation()</span>
+              <span class="fn-tag">exitPresentation()</span>
+              <span class="fn-tag">handleFullscreenChange()</span>
+            </div>
+          </article>
+          <article class="module-card">
+            <h3>SlideManager</h3>
+            <p>슬라이드 생성, 이동, 삭제를 집중적으로 담당합니다.</p>
+            <p class="why">왜 추천: 슬라이드 조작은 데이터와 UI가 동시에 바뀌므로 한 곳에 두는 것이 안전합니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">refreshSlides()</span>
+              <span class="fn-tag">getActiveSlide()</span>
+              <span class="fn-tag">updateSlideVisibility()</span>
+              <span class="fn-tag">nextSlide()</span>
+              <span class="fn-tag">prevSlide()</span>
+              <span class="fn-tag">addNewSlide()</span>
+              <span class="fn-tag">collectSlideAssets()</span>
+              <span class="fn-tag">deleteCurrentSlide()</span>
+              <span class="fn-tag">requestDeleteSlide()</span>
+              <span class="fn-tag">deleteSlideAtIndex()</span>
+              <span class="fn-tag">removeGuideText()</span>
+            </div>
+          </article>
+          <article class="module-card">
+            <h3>AssetRegistry</h3>
+            <p>에셋 이름 정리와 패키지 내부 파일 목록을 관리합니다.</p>
+            <p class="why">왜 추천: 파일명 충돌과 경로 안전성이 핵심이라, 분리하면 안정성이 올라갑니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">sanitizeFileName()</span>
+              <span class="fn-tag">splitName()</span>
+              <span class="fn-tag">splitPath()</span>
+              <span class="fn-tag">sanitizePath()</span>
+              <span class="fn-tag">normalizeAssetPath()</span>
+              <span class="fn-tag">uniquePath()</span>
+              <span class="fn-tag">inferImageExtension()</span>
+              <span class="fn-tag">extractSrcsetPaths()</span>
+              <span class="fn-tag">extractRequiredAssetsFromHtml()</span>
+              <span class="fn-tag">registerRequiredAssetsFromHtml()</span>
+              <span class="fn-tag">matchRequiredAssetPath()</span>
+              <span class="fn-tag">registerImageAsset()</span>
+              <span class="fn-tag">registerSupportFile()</span>
+              <span class="fn-tag">getMissingAssets()</span>
+              <span class="fn-tag">removeImageAssetIfUnused()</span>
+              <span class="fn-tag">removeHtmlAssetIfUnused()</span>
+            </div>
+          </article>
+          <article class="module-card">
+            <h3>PackageIO</h3>
+            <p>패키지 로드/저장과 ZIP 처리, 레거시 변환을 담당합니다.</p>
+            <p class="why">왜 추천: 저장과 로드는 위험도가 높아 한 곳에서 엄격하게 관리해야 합니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">ensurePackageExtension()</span>
+              <span class="fn-tag">stripExtensionFromName()</span>
+              <span class="fn-tag">applyTitleToClone()</span>
+              <span class="fn-tag">parseDataUrl()</span>
+              <span class="fn-tag">decodeBase64ToUint8Array()</span>
+              <span class="fn-tag">convertEmbeddedImagesInDocument()</span>
+              <span class="fn-tag">convertBase64ImagesInHtml()</span>
+              <span class="fn-tag">triggerPackageLoad()</span>
+              <span class="fn-tag">guessMimeType()</span>
+              <span class="fn-tag">parseZipEntries()</span>
+              <span class="fn-tag">findMainHtml()</span>
+              <span class="fn-tag">loadPackageFromFile()</span>
+              <span class="fn-tag">crc32()</span>
+              <span class="fn-tag">toDosDateTime()</span>
+              <span class="fn-tag">toUint8Array()</span>
+              <span class="fn-tag">buildZip()</span>
+              <span class="fn-tag">savePackageAs()</span>
+              <span class="fn-tag">savePackage()</span>
+            </div>
+          </article>
+          <article class="module-card">
+            <h3>ThumbnailView</h3>
+            <p>썸네일 렌더와 활성 상태를 전담합니다.</p>
+            <p class="why">왜 추천: 썸네일은 성능 이슈가 생기기 쉬워 분리 관리가 좋습니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">scheduleThumbnailRefresh()</span>
+              <span class="fn-tag">renderThumbnails()</span>
+              <span class="fn-tag">updateThumbnailActive()</span>
+            </div>
+          </article>
+          <article class="module-card">
+            <h3>InteractionHub</h3>
+            <p>사용자 입력, 드래그, 선택을 한 곳에서 통제합니다.</p>
+            <p class="why">왜 추천: 이벤트가 많아질수록 충돌이 생기기 쉬워 중심 허브가 필요합니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">bindEvents()</span>
+              <span class="fn-tag">handleDroppedFiles()</span>
+              <span class="fn-tag">transformCurrentSlideToHtml()</span>
+              <span class="fn-tag">createDraggableImageFromBlob()</span>
+              <span class="fn-tag">setupInteraction()</span>
+              <span class="fn-tag">selectImage()</span>
+              <span class="fn-tag">deselectImage()</span>
+              <span class="fn-tag">deleteSelectedImage()</span>
+              <span class="fn-tag">showSaveButton()</span>
+              <span class="fn-tag">getElementStyleNumber()</span>
+              <span class="fn-tag">captureImageState()</span>
+              <span class="fn-tag">copySelectedImage()</span>
+              <span class="fn-tag">createDraggableImageFromAsset()</span>
+              <span class="fn-tag">pasteClipboardImage()</span>
+            </div>
+          </article>
+          <article class="module-card">
+            <h3>AppBoot</h3>
+            <p>앱이 시작될 때 필요한 초기 동작만 묶습니다.</p>
+            <p class="why">왜 추천: 시작 시점의 의존성을 명확히 하고, 재시작 로직에 활용하기 좋습니다.</p>
+            <div class="fn-tags">
+              <span class="fn-tag">init()</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="map" class="section-card">
+        <h2>함수 지도</h2>
+        <p class="section-note">각 함수는 무엇을 하고, 왜 필요한지 간단하게 정리했습니다.</p>
+
+        <div class="group" id="group-basics">
+          <h3>기초 상태</h3>
+          <p>슬라이드 목록과 현재 선택된 슬라이드를 다룹니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-refreshSlides">
+              <h4><code>refreshSlides()</code></h4>
+              <p>화면에 있는 슬라이드 목록을 다시 읽어 state에 저장합니다.</p>
+              <ul>
+                <li>언제: 슬라이드 추가/삭제 이후.</li>
+                <li>왜: 최신 목록으로 인덱스와 표시를 맞추기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-getActiveSlide">
+              <h4><code>getActiveSlide()</code></h4>
+              <p>현재 선택된 슬라이드 요소를 반환합니다.</p>
+              <ul>
+                <li>언제: 요소를 추가하거나 조작할 때.</li>
+                <li>왜: 항상 현재 슬라이드에 작업해야 하기 때문.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-removeGuideText">
+              <h4><code>removeGuideText()</code></h4>
+              <p>빈 슬라이드의 안내 문구를 제거합니다.</p>
+              <ul>
+                <li>언제: 이미지나 HTML을 올릴 때.</li>
+                <li>왜: 실제 콘텐츠가 안내 문구에 가리지 않도록.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-stage">
+          <h3>화면 비율과 스케일</h3>
+          <p>스테이지 크기, 비율 전환, 맞춤/채움 모드를 담당합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-updateStageDimensions">
+              <h4><code>updateStageDimensions()</code></h4>
+              <p>16:9 또는 4:3에 맞춰 스테이지 크기를 갱신합니다.</p>
+              <ul>
+                <li>언제: 비율 버튼을 눌렀을 때.</li>
+                <li>왜: 스테이지와 썸네일이 같은 비율을 유지해야 하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-toggleAspectRatio">
+              <h4><code>toggleAspectRatio()</code></h4>
+              <p>비율을 16:9와 4:3 사이에서 전환합니다.</p>
+              <ul>
+                <li>언제: 비율 토글 버튼 클릭 시.</li>
+                <li>왜: 발표 비율을 쉽게 바꾸기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-toggleDisplayMode">
+              <h4><code>toggleDisplayMode()</code></h4>
+              <p>맞춤(Fit)과 채움(Stretch) 모드를 전환합니다.</p>
+              <ul>
+                <li>언제: 화면 모드 버튼 클릭 시.</li>
+                <li>왜: 화면을 꽉 채우거나 비율을 유지하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-resizeStage">
+              <h4><code>resizeStage()</code></h4>
+              <p>현재 화면 크기에 맞게 스테이지를 확대/축소합니다.</p>
+              <ul>
+                <li>언제: 창 크기 변경, 전체화면 전환 시.</li>
+                <li>왜: 화면에 맞게 보기 좋은 크기를 유지해야 하므로.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-utils">
+          <h3>경로 및 파일 유틸</h3>
+          <p>파일명과 경로를 안전하게 정리하고, data URL을 다룹니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-sanitizeFileName">
+              <h4><code>sanitizeFileName()</code></h4>
+              <p>파일명에서 경로와 금지 문자를 제거합니다.</p>
+              <ul>
+                <li>언제: 파일을 패키지에 저장할 때.</li>
+                <li>왜: 저장 시 오류를 막기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-splitName">
+              <h4><code>splitName()</code></h4>
+              <p>파일명을 이름과 확장자로 나눕니다.</p>
+              <ul>
+                <li>언제: 확장자를 판별할 때.</li>
+                <li>왜: 파일 타입을 안전하게 추정하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-splitPath">
+              <h4><code>splitPath()</code></h4>
+              <p>경로를 폴더, 파일명, 확장자로 나눕니다.</p>
+              <ul>
+                <li>언제: 저장 위치를 결정할 때.</li>
+                <li>왜: 경로 조작을 쉽게 하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-parseDataUrl">
+              <h4><code>parseDataUrl()</code></h4>
+              <p>data URL을 MIME과 데이터로 분해합니다.</p>
+              <ul>
+                <li>언제: base64 이미지를 파일로 변환할 때.</li>
+                <li>왜: 올바른 타입의 Blob을 만들기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-decodeBase64ToUint8Array">
+              <h4><code>decodeBase64ToUint8Array()</code></h4>
+              <p>base64 문자열을 바이너리 배열로 바꿉니다.</p>
+              <ul>
+                <li>언제: data URL을 Blob으로 만들 때.</li>
+                <li>왜: ZIP에 넣을 수 있는 형태로 변환하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-convertEmbeddedImagesInDocument">
+              <h4><code>convertEmbeddedImagesInDocument()</code></h4>
+              <p>문서 안의 data 이미지들을 파일 에셋으로 분리합니다.</p>
+              <ul>
+                <li>언제: 레거시 HTML 패키지를 불러올 때.</li>
+                <li>왜: 용량과 관리 측면에서 파일로 분리하는 것이 안전하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-convertBase64ImagesInHtml">
+              <h4><code>convertBase64ImagesInHtml()</code></h4>
+              <p>HTML 문자열을 파싱해 data 이미지를 변환합니다.</p>
+              <ul>
+                <li>언제: 외부 HTML 파일을 읽을 때.</li>
+                <li>왜: data 이미지가 많으면 패키지가 커지기 때문.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-stripExtensionFromName">
+              <h4><code>stripExtensionFromName()</code></h4>
+              <p>파일명에서 확장자를 제거합니다.</p>
+              <ul>
+                <li>언제: 저장 파일의 기본 제목을 만들 때.</li>
+                <li>왜: 제목에 확장자가 보이지 않게 하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-applyTitleToClone">
+              <h4><code>applyTitleToClone()</code></h4>
+              <p>복제된 문서에 title을 넣거나 교체합니다.</p>
+              <ul>
+                <li>언제: 패키지 저장 직전.</li>
+                <li>왜: 저장 파일의 제목을 일관되게 맞추기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-sanitizePath">
+              <h4><code>sanitizePath()</code></h4>
+              <p>경로에서 위험한 요소를 제거합니다.</p>
+              <ul>
+                <li>언제: 외부 파일을 패키지에 넣을 때.</li>
+                <li>왜: 보안 및 경로 충돌을 막기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-ensurePackageExtension">
+              <h4><code>ensurePackageExtension()</code></h4>
+              <p>패키지 이름이 .altppt로 끝나게 보정합니다.</p>
+              <ul>
+                <li>언제: 저장 파일명 생성 시.</li>
+                <li>왜: 사용자가 확장자를 빼도 저장되게 하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-uniquePath">
+              <h4><code>uniquePath()</code></h4>
+              <p>이미 있는 파일명과 충돌하지 않게 이름을 조정합니다.</p>
+              <ul>
+                <li>언제: 에셋을 등록할 때.</li>
+                <li>왜: 같은 이름 덮어쓰기를 방지하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-inferImageExtension">
+              <h4><code>inferImageExtension()</code></h4>
+              <p>이미지 확장자를 파일명 또는 MIME에서 추정합니다.</p>
+              <ul>
+                <li>언제: 이미지 파일명을 만들 때.</li>
+                <li>왜: 올바른 확장자로 저장해야 하기 때문.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-normalizeAssetPath">
+              <h4><code>normalizeAssetPath()</code></h4>
+              <p>외부 URL을 제외하고 안전한 상대 경로만 추출합니다.</p>
+              <ul>
+                <li>언제: HTML 내부 src/href를 검사할 때.</li>
+                <li>왜: 패키지에 포함해야 할 파일만 모으기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-extractSrcsetPaths">
+              <h4><code>extractSrcsetPaths()</code></h4>
+              <p>srcset에서 여러 후보 경로를 추출합니다.</p>
+              <ul>
+                <li>언제: 이미지의 여러 해상도 파일을 찾을 때.</li>
+                <li>왜: 누락된 파일이 생기지 않도록.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-assets">
+          <h3>에셋 등록</h3>
+          <p>필요한 파일 목록을 모으고 패키지에 등록합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-extractRequiredAssetsFromHtml">
+              <h4><code>extractRequiredAssetsFromHtml()</code></h4>
+              <p>HTML에서 필요한 이미지, CSS, 리소스 경로를 모읍니다.</p>
+              <ul>
+                <li>언제: HTML 파일을 추가하거나 불러올 때.</li>
+                <li>왜: 저장 시 누락 파일을 경고하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-registerRequiredAssetsFromHtml">
+              <h4><code>registerRequiredAssetsFromHtml()</code></h4>
+              <p>필요한 에셋 목록을 상태에 등록합니다.</p>
+              <ul>
+                <li>언제: HTML을 파싱한 직후.</li>
+                <li>왜: 누락 파일 검사를 가능하게 하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-matchRequiredAssetPath">
+              <h4><code>matchRequiredAssetPath()</code></h4>
+              <p>파일명만으로 필요한 에셋 경로를 추정합니다.</p>
+              <ul>
+                <li>언제: 폴더 구조 없이 파일이 들어올 때.</li>
+                <li>왜: 정확한 경로로 저장해 링크가 깨지지 않도록.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-registerImageAsset">
+              <h4><code>registerImageAsset()</code></h4>
+              <p>이미지를 assets 폴더에 저장하고 경로를 반환합니다.</p>
+              <ul>
+                <li>언제: 이미지가 새로 추가될 때.</li>
+                <li>왜: 패키지 저장 시 파일을 함께 포함하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-registerSupportFile">
+              <h4><code>registerSupportFile()</code></h4>
+              <p>이미지/HTML 외의 지원 파일을 패키지에 등록합니다.</p>
+              <ul>
+                <li>언제: Shift/Alt 드래그 또는 기타 파일 추가 시.</li>
+                <li>왜: HTML이 참조하는 리소스들을 함께 보관하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-getMissingAssets">
+              <h4><code>getMissingAssets()</code></h4>
+              <p>필요하지만 아직 등록되지 않은 파일 목록을 반환합니다.</p>
+              <ul>
+                <li>언제: 저장하기 직전에.</li>
+                <li>왜: 누락된 파일을 사용자에게 알려야 하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-removeImageAssetIfUnused">
+              <h4><code>removeImageAssetIfUnused()</code></h4>
+              <p>더 이상 사용되지 않는 이미지를 패키지에서 제거합니다.</p>
+              <ul>
+                <li>언제: 이미지 삭제나 복사 교체 후.</li>
+                <li>왜: 불필요한 파일이 계속 쌓이지 않도록.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-removeHtmlAssetIfUnused">
+              <h4><code>removeHtmlAssetIfUnused()</code></h4>
+              <p>더 이상 사용되지 않는 HTML 파일을 제거합니다.</p>
+              <ul>
+                <li>언제: iframe 삭제 후.</li>
+                <li>왜: 패키지 용량을 최소화하기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-package">
+          <h3>패키지 로드</h3>
+          <p>ZIP 패키지를 읽고 슬라이드 데이터를 복원합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-triggerPackageLoad">
+              <h4><code>triggerPackageLoad()</code></h4>
+              <p>파일 선택 창을 열어 패키지를 불러오게 합니다.</p>
+              <ul>
+                <li>언제: "패키지 열기" 버튼 클릭 시.</li>
+                <li>왜: 파일 입력 UI는 직접 클릭해야 열리므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-guessMimeType">
+              <h4><code>guessMimeType()</code></h4>
+              <p>파일 확장자로 MIME 타입을 추정합니다.</p>
+              <ul>
+                <li>언제: ZIP에서 파일을 Blob으로 만들 때.</li>
+                <li>왜: 브라우저가 올바르게 해석하도록.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-parseZipEntries">
+              <h4><code>parseZipEntries()</code></h4>
+              <p>압축되지 않은 ZIP을 직접 파싱해 파일 목록을 만듭니다.</p>
+              <ul>
+                <li>언제: 패키지 파일을 불러올 때.</li>
+                <li>왜: 외부 라이브러리 없이 ZIP을 해석하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-findMainHtml">
+              <h4><code>findMainHtml()</code></h4>
+              <p>ZIP 안에서 슬라이드가 있는 HTML을 찾습니다.</p>
+              <ul>
+                <li>언제: ZIP을 열어 슬라이드를 복원할 때.</li>
+                <li>왜: 올바른 메인 파일을 골라야 하기 때문.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-loadPackageFromFile">
+              <h4><code>loadPackageFromFile()</code></h4>
+              <p>패키지를 읽고 현재 작업을 통째로 교체합니다.</p>
+              <ul>
+                <li>언제: 사용자가 패키지 파일을 선택했을 때.</li>
+                <li>왜: 슬라이드, 에셋, 비율 상태를 모두 복원해야 하므로.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-thumbs">
+          <h3>썸네일</h3>
+          <p>슬라이드 미리보기 UI를 갱신합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-scheduleThumbnailRefresh">
+              <h4><code>scheduleThumbnailRefresh()</code></h4>
+              <p>썸네일 재렌더를 다음 프레임으로 미룹니다.</p>
+              <ul>
+                <li>언제: 저장 버튼을 표시하거나 슬라이드가 변할 때.</li>
+                <li>왜: 연속 호출로 인한 성능 저하를 막기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-renderThumbnails">
+              <h4><code>renderThumbnails()</code></h4>
+              <p>현재 슬라이드들을 작은 썸네일로 다시 그립니다.</p>
+              <ul>
+                <li>언제: 슬라이드 추가/삭제/비율 변경 시.</li>
+                <li>왜: 썸네일이 실제 상태와 맞아야 하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-updateThumbnailActive">
+              <h4><code>updateThumbnailActive()</code></h4>
+              <p>현재 슬라이드의 썸네일을 강조 표시합니다.</p>
+              <ul>
+                <li>언제: 슬라이드를 이동할 때.</li>
+                <li>왜: 사용자가 현재 위치를 알 수 있어야 하므로.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-clipboard">
+          <h3>클립보드</h3>
+          <p>이미지 복사/붙여넣기를 위한 상태 관리입니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-getElementStyleNumber">
+              <h4><code>getElementStyleNumber()</code></h4>
+              <p>스타일 값에서 숫자만 안전하게 추출합니다.</p>
+              <ul>
+                <li>언제: 위치/크기를 읽어야 할 때.</li>
+                <li>왜: 값이 없을 때도 안전하게 처리하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-captureImageState">
+              <h4><code>captureImageState()</code></h4>
+              <p>선택된 이미지의 위치/크기 정보를 저장합니다.</p>
+              <ul>
+                <li>언제: 복사 단축키를 눌렀을 때.</li>
+                <li>왜: 붙여넣기 시 같은 위치/크기를 유지하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-copySelectedImage">
+              <h4><code>copySelectedImage()</code></h4>
+              <p>현재 선택된 이미지를 내부 클립보드에 저장합니다.</p>
+              <ul>
+                <li>언제: Ctrl/Cmd + C 입력 시.</li>
+                <li>왜: 복사 후 붙여넣기를 지원하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-createDraggableImageFromAsset">
+              <h4><code>createDraggableImageFromAsset()</code></h4>
+              <p>저장된 에셋으로 새 이미지 요소를 만듭니다.</p>
+              <ul>
+                <li>언제: 복사된 이미지를 붙여넣을 때.</li>
+                <li>왜: 같은 에셋을 재사용해 용량을 절약하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-pasteClipboardImage">
+              <h4><code>pasteClipboardImage()</code></h4>
+              <p>클립보드에 저장된 이미지를 새로 생성합니다.</p>
+              <ul>
+                <li>언제: Ctrl/Cmd + V 입력 시.</li>
+                <li>왜: 빠른 복제를 제공하기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-init">
+          <h3>초기화</h3>
+          <p>앱 시작 시 필요한 기본 동작을 실행합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-init">
+              <h4><code>init()</code></h4>
+              <p>이벤트 연결, 화면 맞춤, 썸네일 렌더를 한 번에 수행합니다.</p>
+              <ul>
+                <li>언제: 페이지가 로드된 직후.</li>
+                <li>왜: 시작 상태를 깔끔하게 맞추기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-slides">
+          <h3>슬라이드 관리</h3>
+          <p>슬라이드 이동, 추가, 삭제를 담당합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-updateSlideVisibility">
+              <h4><code>updateSlideVisibility()</code></h4>
+              <p>현재 슬라이드만 보이도록 전환합니다.</p>
+              <ul>
+                <li>언제: 슬라이드가 바뀔 때마다.</li>
+                <li>왜: 불필요한 슬라이드가 보이지 않게 하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-nextSlide">
+              <h4><code>nextSlide()</code></h4>
+              <p>다음 슬라이드로 이동합니다.</p>
+              <ul>
+                <li>언제: 휠/키보드/클릭으로 다음 이동 시.</li>
+                <li>왜: 발표 흐름을 이어가기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-prevSlide">
+              <h4><code>prevSlide()</code></h4>
+              <p>이전 슬라이드로 이동합니다.</p>
+              <ul>
+                <li>언제: 휠/키보드/클릭으로 이전 이동 시.</li>
+                <li>왜: 이전 내용으로 빠르게 돌아가기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-addNewSlide">
+              <h4><code>addNewSlide()</code></h4>
+              <p>현재 슬라이드 뒤에 새 슬라이드를 추가합니다.</p>
+              <ul>
+                <li>언제: 새 슬라이드 버튼 클릭 시.</li>
+                <li>왜: 현재 흐름 다음에 콘텐츠를 추가하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-collectSlideAssets">
+              <h4><code>collectSlideAssets()</code></h4>
+              <p>슬라이드에 포함된 이미지/HTML 에셋을 모읍니다.</p>
+              <ul>
+                <li>언제: 슬라이드 삭제 전에.</li>
+                <li>왜: 삭제 시 필요한 파일 정리를 하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-deleteCurrentSlide">
+              <h4><code>deleteCurrentSlide()</code></h4>
+              <p>현재 슬라이드 삭제를 요청합니다.</p>
+              <ul>
+                <li>언제: 삭제 버튼 클릭 시.</li>
+                <li>왜: 바로 삭제하지 않고 확인 절차를 거치기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-requestDeleteSlide">
+              <h4><code>requestDeleteSlide()</code></h4>
+              <p>삭제 확인 메시지를 보여줍니다.</p>
+              <ul>
+                <li>언제: 슬라이드 삭제 요청 시.</li>
+                <li>왜: 실수로 삭제하는 일을 줄이기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-deleteSlideAtIndex">
+              <h4><code>deleteSlideAtIndex()</code></h4>
+              <p>슬라이드를 실제로 제거하고 상태를 정리합니다.</p>
+              <ul>
+                <li>언제: 삭제 확인을 받은 직후.</li>
+                <li>왜: 에셋 정리와 UI 갱신이 필요하기 때문에.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-events">
+          <h3>이벤트 바인딩</h3>
+          <p>키보드, 마우스, 드래그, 전체화면 등의 이벤트를 등록합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-bindEvents">
+              <h4><code>bindEvents()</code></h4>
+              <p>모든 사용자 입력 이벤트를 한 번에 연결합니다.</p>
+              <ul>
+                <li>언제: 앱 초기화 시.</li>
+                <li>왜: 입력 흐름을 통일해 예기치 않은 동작을 줄이기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-drop">
+          <h3>드롭과 HTML</h3>
+          <p>파일 드래그 앤 드롭과 HTML 슬라이드 변환을 처리합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-handleDroppedFiles">
+              <h4><code>handleDroppedFiles()</code></h4>
+              <p>드롭된 파일을 종류별로 처리합니다.</p>
+              <ul>
+                <li>언제: 사용자가 파일을 끌어다 놓았을 때.</li>
+                <li>왜: 이미지, HTML, 패키지를 각각 다르게 처리해야 하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-transformCurrentSlideToHtml">
+              <h4><code>transformCurrentSlideToHtml()</code></h4>
+              <p>현재 슬라이드를 iframe 기반 HTML 슬라이드로 바꿉니다.</p>
+              <ul>
+                <li>언제: HTML 파일을 추가했을 때.</li>
+                <li>왜: 외부 HTML을 슬라이드 안에 표시하기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-images">
+          <h3>이미지 생성과 드래그</h3>
+          <p>이미지를 요소로 만들고 드래그/리사이즈를 붙입니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-createDraggableImageFromBlob">
+              <h4><code>createDraggableImageFromBlob()</code></h4>
+              <p>드롭 또는 붙여넣기한 이미지를 캔버스에 올립니다.</p>
+              <ul>
+                <li>언제: 이미지 파일을 추가했을 때.</li>
+                <li>왜: 슬라이드 안에서 이동/크기 조정이 가능해야 하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-setupInteraction">
+              <h4><code>setupInteraction()</code></h4>
+              <p>요소에 드래그/리사이즈 동작을 연결합니다.</p>
+              <ul>
+                <li>언제: 새 이미지나 iframe 요소를 만들 때.</li>
+                <li>왜: 사용자 편집을 가능하게 하기 위해. 내부에서 onMouseMove/onMouseUp을 사용합니다.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-onMouseMove">
+              <h4><code>onMouseMove()</code></h4>
+              <p>드래그 또는 리사이즈 중 마우스 이동을 계산하는 내부 함수입니다.</p>
+              <ul>
+                <li>언제: setupInteraction 내부에서만 호출.</li>
+                <li>왜: 화면 스케일을 반영해 정확한 이동량을 계산하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-onMouseUp">
+              <h4><code>onMouseUp()</code></h4>
+              <p>드래그 또는 리사이즈 종료를 처리하는 내부 함수입니다.</p>
+              <ul>
+                <li>언제: setupInteraction 내부에서만 호출.</li>
+                <li>왜: 이벤트를 해제하고 저장 상태를 갱신하기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-selection">
+          <h3>선택과 삭제</h3>
+          <p>선택 상태를 관리하고 삭제 시 에셋도 정리합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-selectImage">
+              <h4><code>selectImage()</code></h4>
+              <p>요소를 선택 상태로 표시합니다.</p>
+              <ul>
+                <li>언제: 요소를 클릭했을 때.</li>
+                <li>왜: 선택된 요소에 테두리와 핸들을 보여주기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-deselectImage">
+              <h4><code>deselectImage()</code></h4>
+              <p>선택 상태를 해제합니다.</p>
+              <ul>
+                <li>언제: 빈 공간을 클릭했을 때.</li>
+                <li>왜: 실수 편집을 줄이기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-deleteSelectedImage">
+              <h4><code>deleteSelectedImage()</code></h4>
+              <p>선택된 요소를 삭제하고 관련 에셋을 정리합니다.</p>
+              <ul>
+                <li>언제: Delete 키나 삭제 버튼 클릭 시.</li>
+                <li>왜: 화면과 패키지 모두에서 제거해야 하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-showSaveButton">
+              <h4><code>showSaveButton()</code></h4>
+              <p>저장 버튼을 표시하고 썸네일 갱신을 예약합니다.</p>
+              <ul>
+                <li>언제: 내용이 바뀌는 모든 시점.</li>
+                <li>왜: 사용자에게 저장 필요 상태를 알리기 위해.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-save">
+          <h3>저장과 ZIP</h3>
+          <p>패키지 ZIP 생성과 저장을 담당합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-crc32">
+              <h4><code>crc32()</code></h4>
+              <p>ZIP 파일의 무결성을 위한 CRC32 값을 계산합니다.</p>
+              <ul>
+                <li>언제: ZIP 생성 중.</li>
+                <li>왜: ZIP 규격을 만족시키기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-toDosDateTime">
+              <h4><code>toDosDateTime()</code></h4>
+              <p>ZIP 헤더에 필요한 날짜/시간 값을 만듭니다.</p>
+              <ul>
+                <li>언제: ZIP 항목을 생성할 때.</li>
+                <li>왜: ZIP 포맷이 DOS 시간을 요구하므로.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-toUint8Array">
+              <h4><code>toUint8Array()</code></h4>
+              <p>문자열, Blob, 배열을 Uint8Array로 변환합니다.</p>
+              <ul>
+                <li>언제: ZIP에 넣을 파일 데이터를 준비할 때.</li>
+                <li>왜: ZIP 빌더가 바이트 배열을 필요로 하기 때문.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-buildZip">
+              <h4><code>buildZip()</code></h4>
+              <p>파일 목록으로 ZIP 바이너리를 생성합니다.</p>
+              <ul>
+                <li>언제: 저장 버튼을 눌렀을 때.</li>
+                <li>왜: 단일 파일 패키지로 배포하기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-savePackageAs">
+              <h4><code>savePackageAs()</code></h4>
+              <p>항상 다른 이름으로 저장하도록 강제합니다.</p>
+              <ul>
+                <li>언제: "다른 이름 저장" 버튼 클릭 시.</li>
+                <li>왜: 기존 파일을 덮어쓰지 않도록.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-savePackage">
+              <h4><code>savePackage()</code></h4>
+              <p>현재 상태를 패키지로 저장합니다.</p>
+              <ul>
+                <li>언제: 저장 버튼 클릭 시.</li>
+                <li>왜: 에셋 포함, HTML 정리, ZIP 생성까지 모두 필요하므로.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+
+        <div class="group" id="group-fullscreen">
+          <h3>전체화면</h3>
+          <p>발표 모드 진입과 종료를 담당합니다.</p>
+          <div class="fn-grid">
+            <article class="fn-card" id="fn-startPresentation">
+              <h4><code>startPresentation()</code></h4>
+              <p>브라우저 전체화면을 시작합니다.</p>
+              <ul>
+                <li>언제: 발표 시작 버튼 클릭 시.</li>
+                <li>왜: 몰입형 발표를 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-exitPresentation">
+              <h4><code>exitPresentation()</code></h4>
+              <p>전체화면 모드를 종료합니다.</p>
+              <ul>
+                <li>언제: 발표 종료 또는 마지막 슬라이드 클릭 시.</li>
+                <li>왜: 편집 모드로 돌아가기 위해.</li>
+              </ul>
+            </article>
+            <article class="fn-card" id="fn-handleFullscreenChange">
+              <h4><code>handleFullscreenChange()</code></h4>
+              <p>전체화면 상태 변경을 감지하고 스케일을 갱신합니다.</p>
+              <ul>
+                <li>언제: 전체화면이 켜지거나 꺼질 때.</li>
+                <li>왜: 화면 크기를 다시 계산해야 하므로.</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    alt-ppt4lecture.html 기준 함수 지도. 필요하면 이 문서부터 업데이트하세요.
+  </footer>
+</body>
+</html>
