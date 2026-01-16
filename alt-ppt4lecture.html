@@ -78,10 +78,15 @@
 
         .draggable-iframe iframe {
             pointer-events: none;
+            transform-origin: 0 0;
         }
 
         body.is-fullscreen .draggable-iframe iframe {
             pointer-events: auto;
+        }
+
+        .draggable-iframe {
+            overflow: hidden;
         }
 
         /* [외부 HTML - iframe] 창 안의 창 스타일 */
@@ -123,6 +128,39 @@
             font-size: 14px;
             pointer-events: auto;
             z-index: 2000;
+        }
+
+        .iframe-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 6px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            font-size: 12px;
+            pointer-events: auto;
+            z-index: 2001;
+        }
+
+        .iframe-controls .iframe-control-btn {
+            padding: 2px 6px;
+            font-size: 11px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: none;
+        }
+
+        .iframe-controls .iframe-control-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .iframe-scale-label {
+            min-width: 44px;
+            text-align: center;
         }
 
         /* [UI] 상단 컨트롤 패널 */
@@ -292,7 +330,8 @@
         body.is-fullscreen #page-indicator,
         body.is-fullscreen #thumbnail-strip,
         body.is-fullscreen .resize-handle,
-        body.is-fullscreen .iframe-notice { display: none !important; }
+        body.is-fullscreen .iframe-notice,
+        body.is-fullscreen .iframe-controls { display: none !important; }
         
         body.is-fullscreen .draggable-img.selected {
             border-color: transparent !important;
@@ -368,7 +407,10 @@
             IMAGE_DIR: 'assets',
             PACKAGE_EXTENSION: 'altppt',
             THUMB_SCALE: 0.15,
-            CURSOR_HIDE_DELAY_MS: 3000
+            CURSOR_HIDE_DELAY_MS: 3000,
+            IFRAME_SCALE_STEP: 0.1,
+            IFRAME_SCALE_MIN: 0.2,
+            IFRAME_SCALE_MAX: 3
         };
 
         const dom = {
@@ -463,6 +505,102 @@
         function toggleInvertMode() {
             document.body.classList.toggle('invert-mode');
             updateInvertButton();
+        }
+
+        function getIframeScale(wrapper) {
+            if (!wrapper) return 1;
+            const raw = Number.parseFloat(wrapper.dataset.iframeScale);
+            if (Number.isFinite(raw) && raw > 0) return raw;
+            const iframe = wrapper.querySelector('iframe');
+            if (!iframe || !iframe.style.transform) return 1;
+            const match = iframe.style.transform.match(/scale\(([^)]+)\)/);
+            if (!match) return 1;
+            const parsed = Number.parseFloat(match[1]);
+            return Number.isFinite(parsed) ? parsed : 1;
+        }
+
+        function updateIframeScaleLabel(wrapper, scale) {
+            if (!wrapper) return;
+            const label = wrapper.querySelector('.iframe-scale-label');
+            if (label) label.textContent = `${Math.round(scale * 100)}%`;
+        }
+
+        function applyIframeScale(wrapper, scale) {
+            if (!wrapper) return;
+            const iframe = wrapper.querySelector('iframe');
+            if (!iframe) return;
+            const clamped = Math.min(Math.max(scale, CONFIG.IFRAME_SCALE_MIN), CONFIG.IFRAME_SCALE_MAX);
+            const normalized = Math.round(clamped * 100) / 100;
+            wrapper.dataset.iframeScale = String(normalized);
+            iframe.style.transform = `scale(${normalized})`;
+            updateIframeScaleLabel(wrapper, normalized);
+        }
+
+        function ensureIframeControls(wrapper) {
+            if (!wrapper || !wrapper.classList.contains('draggable-iframe')) return;
+            if (!wrapper.querySelector('iframe')) return;
+            let controls = wrapper.querySelector('.iframe-controls');
+            if (!controls) {
+                controls = document.createElement('div');
+                controls.className = 'iframe-controls';
+
+                const zoomOut = document.createElement('button');
+                zoomOut.type = 'button';
+                zoomOut.className = 'iframe-control-btn';
+                zoomOut.textContent = '-';
+                zoomOut.title = '축소';
+
+                const zoomReset = document.createElement('button');
+                zoomReset.type = 'button';
+                zoomReset.className = 'iframe-control-btn';
+                zoomReset.textContent = '1:1';
+                zoomReset.title = '100%';
+
+                const zoomIn = document.createElement('button');
+                zoomIn.type = 'button';
+                zoomIn.className = 'iframe-control-btn';
+                zoomIn.textContent = '+';
+                zoomIn.title = '확대';
+
+                const label = document.createElement('span');
+                label.className = 'iframe-scale-label';
+                label.textContent = '100%';
+
+                controls.appendChild(zoomOut);
+                controls.appendChild(zoomReset);
+                controls.appendChild(zoomIn);
+                controls.appendChild(label);
+
+                controls.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                });
+                controls.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+
+                zoomOut.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    applyIframeScale(wrapper, getIframeScale(wrapper) - CONFIG.IFRAME_SCALE_STEP);
+                });
+                zoomIn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    applyIframeScale(wrapper, getIframeScale(wrapper) + CONFIG.IFRAME_SCALE_STEP);
+                });
+                zoomReset.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    applyIframeScale(wrapper, 1);
+                });
+
+                wrapper.appendChild(controls);
+            }
+
+            applyIframeScale(wrapper, getIframeScale(wrapper));
+        }
+
+        function initializeIframeControls() {
+            document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                ensureIframeControls(wrapper);
+            });
         }
 
         // === 스테이지 스케일링 (수정됨) ===
@@ -1005,12 +1143,15 @@
                     iframe.dataset.filename = srcPath;
                     iframe.src = url;
                     iframe.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+                    const wrapper = iframe.closest('.draggable-iframe');
+                    if (wrapper) ensureIframeControls(wrapper);
                 });
             });
 
             state.currentSlideIndex = 0;
             updateSlideVisibility();
             renderThumbnails();
+            initializeIframeControls();
             showSaveButton();
             resizeStage();
 
@@ -1086,6 +1227,7 @@
                     iframe.replaceWith(placeholder);
                 });
                 clone.querySelectorAll('.iframe-notice').forEach(el => el.remove());
+                clone.querySelectorAll('.iframe-controls').forEach(el => el.remove());
 
                 inner.appendChild(clone);
                 thumb.appendChild(inner);
@@ -1204,6 +1346,7 @@
             resizeStage();
             updateSlideVisibility();
             renderThumbnails();
+            initializeIframeControls();
         }
 
         init();
@@ -1531,6 +1674,7 @@
             wrapper.appendChild(notice);
             activeSlide.appendChild(wrapper);
             
+            ensureIframeControls(wrapper);
             setupInteraction(wrapper, handle);
             selectImage(wrapper);
             showSaveButton();
