@@ -77,7 +77,11 @@
         }
 
         .draggable-iframe iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
             pointer-events: none;
+            will-change: transform;
             transform-origin: 0 0;
         }
 
@@ -87,6 +91,18 @@
 
         .draggable-iframe {
             overflow: hidden;
+        }
+
+        body.pan-mode .draggable-iframe iframe {
+            pointer-events: none !important;
+        }
+
+        body.pan-mode {
+            cursor: grab;
+        }
+
+        body.pan-mode.is-panning {
+            cursor: grabbing;
         }
 
         /* [외부 HTML - iframe] 창 안의 창 스타일 */
@@ -381,14 +397,7 @@
     <!-- 슬라이드 스테이지 -->
     <div id="slide-stage">
         <!-- [1페이지] -->
-        <div class="slide active">
-            <div class="guide-text">
-                <h1>프레젠테이션 캔버스</h1>
-                <p>이제 PPT처럼 작업하세요.</p>
-                <p>위 버튼으로 <b>16:9</b> 또는 <b>4:3</b> 비율을 설정하세요.</p>
-                <p>이미지와 HTML 파일을 드래그하여 패키지로 저장할 수 있습니다.</p>
-            </div>
-        </div>
+        <div class="slide active"></div>
     </div>
 
     <div id="page-indicator">1 / 1</div>
@@ -439,6 +448,8 @@
             thumbnailRefreshPending: false,
             lastSaveHandle: null,
             lastPackageFileName: '',
+            isSpacePressed: false,
+            activeIframePan: null,
             
             // [NEW] 화면 설정 상태
             aspectRatio: '16:9', // '16:9' | '4:3'
@@ -507,33 +518,98 @@
             updateInvertButton();
         }
 
-        function getIframeScale(wrapper) {
-            if (!wrapper) return 1;
-            const raw = Number.parseFloat(wrapper.dataset.iframeScale);
-            if (Number.isFinite(raw) && raw > 0) return raw;
-            const iframe = wrapper.querySelector('iframe');
-            if (!iframe || !iframe.style.transform) return 1;
-            const match = iframe.style.transform.match(/scale\(([^)]+)\)/);
-            if (!match) return 1;
-            const parsed = Number.parseFloat(match[1]);
-            return Number.isFinite(parsed) ? parsed : 1;
+        function getWrapperMetrics(wrapper) {
+            const rect = wrapper.getBoundingClientRect();
+            const baseW = wrapper.clientWidth || rect.width || 1;
+            const baseH = wrapper.clientHeight || rect.height || 1;
+            const scaleX = rect.width / baseW;
+            const scaleY = rect.height / baseH;
+            return { rect, baseW, baseH, scaleX, scaleY };
         }
 
-        function updateIframeScaleLabel(wrapper, scale) {
+        function getIframeViewState(wrapper) {
+            if (!wrapper) return { viewScale: 1, offsetX: 0, offsetY: 0 };
+            const mode = wrapper.dataset.iframeScaleMode;
+            const rawScale = Number.parseFloat(wrapper.dataset.iframeScale);
+            const rawOffsetX = Number.parseFloat(wrapper.dataset.iframeOffsetX);
+            const rawOffsetY = Number.parseFloat(wrapper.dataset.iframeOffsetY);
+
+            let viewScale = 1;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (mode === 'fov') {
+                if (Number.isFinite(rawScale) && rawScale > 0) viewScale = rawScale;
+                if (Number.isFinite(rawOffsetX)) offsetX = rawOffsetX;
+                if (Number.isFinite(rawOffsetY)) offsetY = rawOffsetY;
+                return { viewScale, offsetX, offsetY };
+            }
+
+            if (mode === 'viewport') {
+                if (Number.isFinite(rawScale) && rawScale > 0) viewScale = rawScale;
+                const zoom = viewScale > 0 ? 1 / viewScale : 1;
+                if (Number.isFinite(rawOffsetX)) offsetX = -rawOffsetX * zoom;
+                if (Number.isFinite(rawOffsetY)) offsetY = -rawOffsetY * zoom;
+                return { viewScale, offsetX, offsetY };
+            }
+
+            if (Number.isFinite(rawScale) && rawScale > 0) {
+                viewScale = 1 / rawScale;
+            }
+            if (Number.isFinite(rawOffsetX)) offsetX = rawOffsetX;
+            if (Number.isFinite(rawOffsetY)) offsetY = rawOffsetY;
+
+            return { viewScale, offsetX, offsetY };
+        }
+
+        function updateIframeScaleLabel(wrapper, viewScale) {
             if (!wrapper) return;
             const label = wrapper.querySelector('.iframe-scale-label');
-            if (label) label.textContent = `${Math.round(scale * 100)}%`;
+            if (!label) return;
+            const zoomPercent = Math.round((1 / viewScale) * 100);
+            label.textContent = `${zoomPercent}%`;
         }
 
-        function applyIframeScale(wrapper, scale) {
+        function applyIframeView(wrapper, viewScale, offsetX, offsetY) {
             if (!wrapper) return;
             const iframe = wrapper.querySelector('iframe');
             if (!iframe) return;
-            const clamped = Math.min(Math.max(scale, CONFIG.IFRAME_SCALE_MIN), CONFIG.IFRAME_SCALE_MAX);
-            const normalized = Math.round(clamped * 100) / 100;
-            wrapper.dataset.iframeScale = String(normalized);
-            iframe.style.transform = `scale(${normalized})`;
-            updateIframeScaleLabel(wrapper, normalized);
+            const metrics = getWrapperMetrics(wrapper);
+            const baseScale = Number.isFinite(viewScale) ? viewScale : 1;
+            const clampedScale = Math.min(Math.max(baseScale, CONFIG.IFRAME_SCALE_MIN), CONFIG.IFRAME_SCALE_MAX);
+            const zoom = 1 / clampedScale;
+            const scaledW = metrics.baseW * zoom;
+            const scaledH = metrics.baseH * zoom;
+            const minOffsetX = Math.min(0, metrics.baseW - scaledW);
+            const minOffsetY = Math.min(0, metrics.baseH - scaledH);
+            const clampedX = Math.min(0, Math.max(offsetX || 0, minOffsetX));
+            const clampedY = Math.min(0, Math.max(offsetY || 0, minOffsetY));
+
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.transform = `translate(${clampedX}px, ${clampedY}px) scale(${zoom})`;
+
+            wrapper.dataset.iframeScaleMode = 'fov';
+            wrapper.dataset.iframeScale = String(clampedScale);
+            wrapper.dataset.iframeOffsetX = String(clampedX);
+            wrapper.dataset.iframeOffsetY = String(clampedY);
+
+            updateIframeScaleLabel(wrapper, clampedScale);
+        }
+
+        function zoomIframeView(wrapper, nextScale, anchor) {
+            if (!wrapper) return;
+            const current = getIframeViewState(wrapper);
+            const metrics = getWrapperMetrics(wrapper);
+            const anchorX = anchor && Number.isFinite(anchor.x) ? anchor.x : metrics.baseW / 2;
+            const anchorY = anchor && Number.isFinite(anchor.y) ? anchor.y : metrics.baseH / 2;
+            const currentZoom = current.viewScale > 0 ? 1 / current.viewScale : 1;
+            const nextZoom = nextScale > 0 ? 1 / nextScale : 1;
+            const contentX = (anchorX - current.offsetX) / currentZoom;
+            const contentY = (anchorY - current.offsetY) / currentZoom;
+            const nextOffsetX = anchorX - contentX * nextZoom;
+            const nextOffsetY = anchorY - contentY * nextZoom;
+            applyIframeView(wrapper, nextScale, nextOffsetX, nextOffsetY);
         }
 
         function ensureIframeControls(wrapper) {
@@ -580,21 +656,24 @@
 
                 zoomOut.addEventListener('click', (e) => {
                     e.preventDefault();
-                    applyIframeScale(wrapper, getIframeScale(wrapper) - CONFIG.IFRAME_SCALE_STEP);
+                    const current = getIframeViewState(wrapper);
+                    zoomIframeView(wrapper, current.viewScale + CONFIG.IFRAME_SCALE_STEP);
                 });
                 zoomIn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    applyIframeScale(wrapper, getIframeScale(wrapper) + CONFIG.IFRAME_SCALE_STEP);
+                    const current = getIframeViewState(wrapper);
+                    zoomIframeView(wrapper, current.viewScale - CONFIG.IFRAME_SCALE_STEP);
                 });
                 zoomReset.addEventListener('click', (e) => {
                     e.preventDefault();
-                    applyIframeScale(wrapper, 1);
+                    applyIframeView(wrapper, 1, 0, 0);
                 });
 
                 wrapper.appendChild(controls);
             }
 
-            applyIframeScale(wrapper, getIframeScale(wrapper));
+            const current = getIframeViewState(wrapper);
+            applyIframeView(wrapper, current.viewScale, current.offsetX, current.offsetY);
         }
 
         function initializeIframeControls() {
@@ -1020,10 +1099,13 @@
             return null;
         }
 
-        async function loadPackageFromFile(file) {
+        async function loadPackageFromFile(file, options = {}) {
             if (!file) return;
-            const proceed = confirm("현재 작업을 덮어쓰고 패키지를 불러올까요?");
-            if (!proceed) return;
+            const skipConfirm = options && options.skipConfirm === true;
+            if (!skipConfirm) {
+                const proceed = confirm("현재 작업을 덮어쓰고 패키지를 불러올까요?");
+                if (!proceed) return;
+            }
 
             let files;
             try {
@@ -1351,6 +1433,32 @@
 
         init();
 
+        // App bridge: load package URL when provided by a host app.
+        (function setupPackageAutoLoad() {
+            const params = new URLSearchParams(window.location.search);
+            const packageUrl = params.get('package');
+            if (!packageUrl) return;
+
+            const loadFromUrl = async (url) => {
+                try {
+                    const resolvedUrl = new URL(url, window.location.href);
+                    const response = await fetch(resolvedUrl.toString());
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const buffer = await response.arrayBuffer();
+                    const rawName = resolvedUrl.pathname.split('/').pop() || 'package.altppt';
+                    const fileName = decodeURIComponent(rawName);
+                    const file = new File([buffer], fileName, { type: 'application/zip' });
+                    await loadPackageFromFile(file, { skipConfirm: true });
+                } catch (err) {
+                    alert(`패키지를 불러오지 못했습니다.\n${err.message || err}`);
+                }
+            };
+
+            loadFromUrl(packageUrl);
+        })();
+
 
         // === 슬라이드 네비게이션 ===
         function updateSlideVisibility() {
@@ -1466,8 +1574,22 @@
 
             window.addEventListener('wheel', (e) => {
                 if (dom.thumbnailStrip && dom.thumbnailStrip.contains(e.target)) return;
+                const iframeWrapper = e.target.closest('.draggable-iframe');
+                if (iframeWrapper) {
+                    const metrics = getWrapperMetrics(iframeWrapper);
+                    const anchor = {
+                        x: (e.clientX - metrics.rect.left) / metrics.scaleX,
+                        y: (e.clientY - metrics.rect.top) / metrics.scaleY
+                    };
+                    const current = getIframeViewState(iframeWrapper);
+                    const zoomFactor = Math.exp(-e.deltaY * 0.001);
+                    const nextScale = current.viewScale / zoomFactor;
+                    zoomIframeView(iframeWrapper, nextScale, anchor);
+                    e.preventDefault();
+                    return;
+                }
                 if (e.deltaY > 0) nextSlide(); else prevSlide();
-            });
+            }, { passive: false });
 
             if (dom.thumbnailStrip) {
                 dom.thumbnailStrip.addEventListener('wheel', (e) => {
@@ -1514,6 +1636,15 @@
                 const isModKey = e.ctrlKey || e.metaKey;
                 const key = e.key.toLowerCase();
 
+                if (e.code === 'Space' || e.key === ' ') {
+                    if (!state.isSpacePressed) {
+                        state.isSpacePressed = true;
+                        document.body.classList.add('pan-mode');
+                    }
+                    e.preventDefault();
+                    return;
+                }
+
                 if (isModKey && key === 'c' && state.selectedImage) {
                     e.preventDefault();
                     copySelectedImage();
@@ -1528,9 +1659,18 @@
                     return;
                 }
 
-                if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') nextSlide();
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevSlide();
                 if (e.key === 'Delete' && state.selectedImage) deleteSelectedImage();
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space' || e.key === ' ') {
+                    state.isSpacePressed = false;
+                    document.body.classList.remove('pan-mode');
+                    document.body.classList.remove('is-panning');
+                    state.activeIframePan = null;
+                }
             });
 
             if (dom.packageInput) {
@@ -1579,6 +1719,45 @@
 
             document.addEventListener('mousedown', (e) => {
                 if (!e.target.closest('.draggable-img') && !e.target.closest('button') && !e.target.closest('.nav-zone')) deselectImage();
+            });
+
+            document.addEventListener('mousedown', (e) => {
+                if (!state.isSpacePressed) return;
+                if (e.button !== 0) return;
+                const wrapper = e.target.closest('.draggable-iframe');
+                if (!wrapper) return;
+                if (e.target.closest('.iframe-controls')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const current = getIframeViewState(wrapper);
+                const metrics = getWrapperMetrics(wrapper);
+                state.activeIframePan = {
+                    wrapper,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    originX: current.offsetX,
+                    originY: current.offsetY,
+                    viewScale: current.viewScale,
+                    scaleX: metrics.scaleX,
+                    scaleY: metrics.scaleY
+                };
+                document.body.classList.add('is-panning');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!state.activeIframePan) return;
+                const pan = state.activeIframePan;
+                const dx = (e.clientX - pan.startX) / pan.scaleX;
+                const dy = (e.clientY - pan.startY) / pan.scaleY;
+                const nextX = pan.originX + dx;
+                const nextY = pan.originY + dy;
+                applyIframeView(pan.wrapper, pan.viewScale, nextX, nextY);
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!state.activeIframePan) return;
+                state.activeIframePan = null;
+                document.body.classList.remove('is-panning');
             });
 
             const handleMouseActivity = () => {
@@ -1722,6 +1901,7 @@
         function setupInteraction(element, handle) {
             element.addEventListener('mousedown', (e) => {
                 if (document.body.classList.contains('is-fullscreen')) return;
+                if (state.isSpacePressed && element.classList.contains('draggable-iframe')) return;
                 if (e.target === handle) return; 
                 
                 e.stopPropagation(); selectImage(element);
@@ -1765,6 +1945,10 @@
                     if (newWidth > 50) {
                         element.style.width = newWidth + 'px';
                         element.style.height = (newWidth / aspectRatio) + 'px';
+                        if (element.classList.contains('draggable-iframe')) {
+                            const current = getIframeViewState(element);
+                            applyIframeView(element, current.viewScale, current.offsetX, current.offsetY);
+                        }
                     }
                 }
                 function onMouseUp() {
