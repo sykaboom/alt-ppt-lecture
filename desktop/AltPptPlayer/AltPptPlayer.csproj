@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\\..\\alt-ppt4lecture.html">
+    <Content Include="..\\..\\web-dist\\player.html">
       <Link>player.html</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

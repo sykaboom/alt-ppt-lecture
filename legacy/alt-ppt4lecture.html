@@ -57,10 +57,36 @@
             min-width: 50px;
             min-height: 50px;
         }
+
+        .draggable-text {
+            padding: 6px;
+        }
+
+        .draggable-text .text-box {
+            width: 100%;
+            height: 100%;
+            outline: none;
+            cursor: text;
+            user-select: text;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .draggable-text .text-box:empty::before {
+            content: attr(data-placeholder);
+            color: #888;
+        }
         
         .draggable-img.selected {
             border: 2px solid #007bff; 
             z-index: 1000; 
+        }
+
+        .draggable-video video {
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: #000;
         }
 
         .resize-handle {
@@ -85,12 +111,12 @@
             transform-origin: 0 0;
         }
 
-        body.is-fullscreen .draggable-iframe iframe {
-            pointer-events: auto;
-        }
-
         .draggable-iframe {
             overflow: hidden;
+        }
+
+        .draggable-iframe.iframe-interactive iframe {
+            pointer-events: auto;
         }
 
         body.pan-mode .draggable-iframe iframe {
@@ -190,6 +216,9 @@
             justify-content: flex-end;
             transition: opacity 0.3s;
         }
+        .ui-spacer {
+            width: 10px;
+        }
         button {
             padding: 8px 16px;
             background: #444;
@@ -206,6 +235,48 @@
         #save-as-btn { background: #17a2b8; border-color: #17a2b8; display: none; }
         #fs-btn { background: #007bff; border-color: #007bff; }
         .mode-btn { background: #e0a800; border-color: #d39e00; color: #fff; }
+
+        .text-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .text-controls select,
+        .text-controls input[type="number"],
+        .text-controls input[type="color"] {
+            height: 32px;
+            border: 1px solid #666;
+            border-radius: 4px;
+            background: #2f2f2f;
+            color: #fff;
+            font-size: 12px;
+        }
+
+        .text-controls select,
+        .text-controls input[type="number"] {
+            padding: 0 8px;
+        }
+
+        .text-controls input[type="number"] {
+            width: 70px;
+        }
+
+        .text-controls input[type="color"] {
+            width: 34px;
+            padding: 0;
+        }
+
+        .text-controls .toggle-btn {
+            width: 34px;
+            padding: 0;
+            font-weight: 700;
+        }
+
+        .text-controls .toggle-btn.is-active {
+            background: #1f6feb;
+            border-color: #1f6feb;
+        }
 
         /* [UI] 페이지 번호 */
         #page-indicator {
@@ -301,6 +372,18 @@
             border: 4px dashed #bbb;
         }
 
+        .thumbnail-video-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f0f0f;
+            color: #e6e6e6;
+            font-size: 28px;
+            border: 3px dashed #444;
+        }
+
         .thumbnail-label {
             position: absolute;
             left: 6px;
@@ -346,8 +429,19 @@
         body.is-fullscreen #page-indicator,
         body.is-fullscreen #thumbnail-strip,
         body.is-fullscreen .resize-handle,
-        body.is-fullscreen .iframe-notice,
-        body.is-fullscreen .iframe-controls { display: none !important; }
+        body.is-fullscreen .iframe-notice { display: none !important; }
+
+        body.is-fullscreen .iframe-controls {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        body.is-fullscreen .draggable-iframe:hover .iframe-controls,
+        body.is-fullscreen .draggable-iframe.iframe-interactive .iframe-controls {
+            opacity: 1;
+            pointer-events: auto;
+        }
         
         body.is-fullscreen .draggable-img.selected {
             border-color: transparent !important;
@@ -370,28 +464,40 @@
         body.is-fullscreen.cursor-hidden * {
             cursor: none !important;
         }
-
     </style>
 </head>
 <body>
 
     <!-- 양쪽 네비게이션 버튼 -->
-    <div id="nav-prev" class="nav-zone" onclick="prevSlide()">❮</div>
-    <div id="nav-next" class="nav-zone" onclick="nextSlide()">❯</div>
+    <div id="nav-prev" class="nav-zone" data-action="prevSlide">❮</div>
+    <div id="nav-next" class="nav-zone" data-action="nextSlide">❯</div>
 
     <!-- 상단 UI 컨트롤 -->
     <div id="ui-controls">
-        <button id="ratio-btn" class="mode-btn" onclick="toggleAspectRatio()">비율: 16:9</button>
-        <button id="fit-btn" class="mode-btn" onclick="toggleDisplayMode()">화면: 맞춤</button>
-        <button id="invert-btn" class="mode-btn" onclick="toggleInvertMode()">색상: 기본</button>
-        <button id="fs-btn" onclick="startPresentation()">🖥️ 발표 시작</button>
-        <div style="width: 10px;"></div>
-        <button onclick="addNewSlide()">+ 새 슬라이드</button>
-        <button onclick="deleteCurrentSlide()">현재 삭제</button>
-        <button onclick="deleteSelectedImage()">요소 삭제(Del)</button>
-        <button onclick="triggerPackageLoad()">📂 열기</button>
-        <button id="save-btn" onclick="savePackage()">💾 저장</button>
-        <button id="save-as-btn" onclick="savePackageAs()">📄 다른 이름 저장</button>
+        <button id="ratio-btn" class="mode-btn" data-action="toggleAspectRatio">비율: 16:9</button>
+        <button id="fit-btn" class="mode-btn" data-action="toggleDisplayMode">화면: 맞춤</button>
+        <button id="invert-btn" class="mode-btn" data-action="toggleInvertMode">색상: 기본</button>
+        <div class="text-controls">
+            <button id="add-text-btn" data-action="addTextBox">T 텍스트</button>
+            <button id="font-bold-btn" class="toggle-btn" type="button" aria-pressed="false" title="굵게">B</button>
+            <select id="font-family-select" aria-label="글꼴">
+                <option value="'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif">Noto Sans KR</option>
+                <option value="'Noto Serif KR', 'Nanum Myeongjo', 'Times New Roman', serif">Noto Serif KR</option>
+                <option value="'Nanum Gothic', 'Malgun Gothic', 'Segoe UI', sans-serif">Nanum Gothic</option>
+                <option value="'Nanum Myeongjo', 'Times New Roman', serif">Nanum Myeongjo</option>
+                <option value="'D2Coding', 'Consolas', 'Courier New', monospace">D2Coding</option>
+            </select>
+            <input id="font-size-input" type="number" min="8" max="200" value="32" aria-label="글꼴 크기" />
+            <input id="font-color-input" type="color" value="#111111" aria-label="글꼴 색상" />
+        </div>
+        <button id="fs-btn" data-action="startPresentation">🖥️ 발표 시작</button>
+        <div class="ui-spacer"></div>
+        <button id="add-slide-btn" data-action="addNewSlide">+ 새 슬라이드</button>
+        <button id="delete-slide-btn" data-action="deleteCurrentSlide">현재 삭제</button>
+        <button id="delete-element-btn" data-action="deleteSelectedImage">요소 삭제(Del)</button>
+        <button id="open-package-btn" data-action="triggerPackageLoad">📂 열기</button>
+        <button id="save-btn" data-action="savePackage">💾 저장</button>
+        <button id="save-as-btn" data-action="savePackageAs">📄 다른 이름 저장</button>
     </div>
 
     <!-- 슬라이드 스테이지 -->
@@ -404,7 +510,7 @@
     <div id="thumbnail-strip" aria-label="슬라이드 미리보기"></div>
     <input type="file" id="package-input" accept=".altppt,.zip" style="display:none" />
 
-    <script>
+    <script type="module">
         // === 코드 구조 ===
         // 상태/DOM 참조 -> 유틸 -> 에셋/패키지 -> 썸네일 -> 슬라이드/스케일
 
@@ -424,6 +530,8 @@
 
         const dom = {
             indicator: document.getElementById('page-indicator'),
+            navPrev: document.getElementById('nav-prev'),
+            navNext: document.getElementById('nav-next'),
             saveBtn: document.getElementById('save-btn'),
             saveAsBtn: document.getElementById('save-as-btn'),
             thumbnailStrip: document.getElementById('thumbnail-strip'),
@@ -431,7 +539,17 @@
             stage: document.getElementById('slide-stage'),
             ratioBtn: document.getElementById('ratio-btn'),
             fitBtn: document.getElementById('fit-btn'),
-            invertBtn: document.getElementById('invert-btn')
+            invertBtn: document.getElementById('invert-btn'),
+            fsBtn: document.getElementById('fs-btn'),
+            addSlideBtn: document.getElementById('add-slide-btn'),
+            deleteSlideBtn: document.getElementById('delete-slide-btn'),
+            deleteElementBtn: document.getElementById('delete-element-btn'),
+            openPackageBtn: document.getElementById('open-package-btn'),
+            addTextBtn: document.getElementById('add-text-btn'),
+            fontBoldBtn: document.getElementById('font-bold-btn'),
+            fontFamilySelect: document.getElementById('font-family-select'),
+            fontSizeInput: document.getElementById('font-size-input'),
+            fontColorInput: document.getElementById('font-color-input')
         };
 
         const state = {
@@ -443,6 +561,7 @@
             packageFiles: new Map(),
             requiredAssets: new Set(),
             imageCounter: 1,
+            videoCounter: 1,
             fileCounter: 1,
             clipboardImage: null,
             thumbnailRefreshPending: false,
@@ -450,6 +569,13 @@
             lastPackageFileName: '',
             isSpacePressed: false,
             activeIframePan: null,
+            textEditingElement: null,
+            textDefaults: {
+                fontFamily: dom.fontFamilySelect ? dom.fontFamilySelect.value : "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif",
+                fontSize: dom.fontSizeInput ? Number.parseInt(dom.fontSizeInput.value, 10) || 32 : 32,
+                fontColor: dom.fontColorInput ? dom.fontColorInput.value : '#111111',
+                fontBold: dom.fontBoldBtn ? dom.fontBoldBtn.classList.contains('is-active') : false
+            },
             
             // [NEW] 화면 설정 상태
             aspectRatio: '16:9', // '16:9' | '4:3'
@@ -570,6 +696,26 @@
             label.textContent = `${zoomPercent}%`;
         }
 
+        function setIframeInteractive(wrapper, isInteractive) {
+            if (!wrapper) return;
+            wrapper.classList.toggle('iframe-interactive', isInteractive);
+            const toggle = wrapper.querySelector('.iframe-play-toggle');
+            if (!toggle) return;
+            if (isInteractive) {
+                toggle.textContent = '편집';
+                toggle.title = '편집 모드';
+            } else {
+                toggle.textContent = '재생';
+                toggle.title = '재생 모드';
+            }
+        }
+
+        function toggleIframeInteractive(wrapper) {
+            if (!wrapper) return;
+            const isInteractive = wrapper.classList.contains('iframe-interactive');
+            setIframeInteractive(wrapper, !isInteractive);
+        }
+
         function applyIframeView(wrapper, viewScale, offsetX, offsetY) {
             if (!wrapper) return;
             const iframe = wrapper.querySelector('iframe');
@@ -610,6 +756,7 @@
             const nextOffsetX = anchorX - contentX * nextZoom;
             const nextOffsetY = anchorY - contentY * nextZoom;
             applyIframeView(wrapper, nextScale, nextOffsetX, nextOffsetY);
+            showSaveButton();
         }
 
         function ensureIframeControls(wrapper) {
@@ -619,6 +766,12 @@
             if (!controls) {
                 controls = document.createElement('div');
                 controls.className = 'iframe-controls';
+
+                const playToggle = document.createElement('button');
+                playToggle.type = 'button';
+                playToggle.className = 'iframe-control-btn iframe-play-toggle';
+                playToggle.textContent = '재생';
+                playToggle.title = '재생 모드';
 
                 const zoomOut = document.createElement('button');
                 zoomOut.type = 'button';
@@ -642,6 +795,7 @@
                 label.className = 'iframe-scale-label';
                 label.textContent = '100%';
 
+                controls.appendChild(playToggle);
                 controls.appendChild(zoomOut);
                 controls.appendChild(zoomReset);
                 controls.appendChild(zoomIn);
@@ -652,6 +806,11 @@
                 });
                 controls.addEventListener('click', (e) => {
                     e.stopPropagation();
+                });
+
+                playToggle.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    toggleIframeInteractive(wrapper);
                 });
 
                 zoomOut.addEventListener('click', (e) => {
@@ -674,6 +833,7 @@
 
             const current = getIframeViewState(wrapper);
             applyIframeView(wrapper, current.viewScale, current.offsetX, current.offsetY);
+            setIframeInteractive(wrapper, wrapper.classList.contains('iframe-interactive'));
         }
 
         function initializeIframeControls() {
@@ -737,6 +897,7 @@
             // offsetY는 편집모드에서 썸네일 공간 때문에 살짝 위로 올리는 용도
             stage.style.transform = `translate(-50%, calc(-50% + ${offsetY}px)) scale(${finalScaleX}, ${finalScaleY})`;
         }
+
 
         // === 경로/파일 유틸 ===
         function sanitizeFileName(name) {
@@ -893,6 +1054,18 @@
             return typeMap[type] || 'png';
         }
 
+        function inferVideoExtension(name, type) {
+            const extFromName = splitName(sanitizeFileName(name)).ext.toLowerCase();
+            if (extFromName) return extFromName.replace('.', '');
+            const typeMap = {
+                'video/mp4': 'mp4',
+                'video/webm': 'webm',
+                'video/ogg': 'ogv',
+                'video/quicktime': 'mov'
+            };
+            return typeMap[type] || 'mp4';
+        }
+
         function normalizeAssetPath(value) {
             if (!value) return null;
             const trimmed = value.trim();
@@ -915,6 +1088,104 @@
                 if (normalized) assets.add(normalized);
             }
         }
+
+        function parseUrlCandidate(text) {
+            if (!text) return null;
+            const lines = String(text)
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean);
+            if (!lines.length) return null;
+            const candidate = lines.find(line => !line.startsWith('#')) || lines[0];
+            try {
+                return new URL(candidate).toString();
+            } catch {
+                return null;
+            }
+        }
+
+        function isVideoUrl(url) {
+            if (!url) return false;
+            const lower = url.toLowerCase().split('#')[0].split('?')[0];
+            return /\.(mp4|webm|ogg|ogv|mov|m4v)$/.test(lower);
+        }
+
+        function parseYouTubeStartTime(value) {
+            if (!value) return 0;
+            const trimmed = String(value).trim().toLowerCase();
+            if (!trimmed) return 0;
+            if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10) || 0;
+            let total = 0;
+            const pattern = /(\d+)(h|m|s)/g;
+            let match;
+            while ((match = pattern.exec(trimmed)) !== null) {
+                const amount = Number.parseInt(match[1], 10);
+                if (!Number.isFinite(amount)) continue;
+                if (match[2] === 'h') total += amount * 3600;
+                if (match[2] === 'm') total += amount * 60;
+                if (match[2] === 's') total += amount;
+            }
+            return total;
+        }
+
+        function extractYouTubeVideoId(url) {
+            if (!url) return null;
+            try {
+                const parsed = new URL(url);
+                const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+                let videoId = '';
+
+                if (host === 'youtu.be') {
+                    videoId = parsed.pathname.split('/')[1] || '';
+                } else if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+                    if (parsed.pathname === '/watch') {
+                        videoId = parsed.searchParams.get('v') || '';
+                    } else if (parsed.pathname.startsWith('/shorts/')) {
+                        videoId = parsed.pathname.split('/')[2] || '';
+                    } else if (parsed.pathname.startsWith('/embed/')) {
+                        videoId = parsed.pathname.split('/')[2] || '';
+                    }
+                }
+
+                if (!videoId) return null;
+                videoId = videoId.split('?')[0].split('&')[0];
+                if (!/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) return null;
+
+                const startParam = parsed.searchParams.get('t')
+                    || parsed.searchParams.get('start')
+                    || parsed.searchParams.get('time_continue');
+                const startSeconds = parseYouTubeStartTime(startParam);
+
+                return { videoId, startSeconds };
+            } catch {
+                return null;
+            }
+        }
+
+        function getYouTubeEmbedUrl(url) {
+            const data = extractYouTubeVideoId(url);
+            if (!data) return null;
+            const params = new URLSearchParams({
+                rel: '0',
+                modestbranding: '1',
+                playsinline: '1'
+            });
+            if (data.startSeconds > 0) {
+                params.set('start', String(data.startSeconds));
+            }
+            return `https://www.youtube-nocookie.com/embed/${data.videoId}?${params.toString()}`;
+        }
+
+        function getUrlHostLabel(url) {
+            if (!url) return 'External';
+            try {
+                const parsed = new URL(url);
+                return parsed.hostname || 'External';
+            } catch {
+                return 'External';
+            }
+        }
+
 
         // === 에셋/패키지 등록 ===
         function extractRequiredAssetsFromHtml(htmlText) {
@@ -967,6 +1238,19 @@
             return assetPath;
         }
 
+        function registerVideoAsset(blob, preferredName) {
+            const extension = inferVideoExtension(preferredName, blob.type || '');
+            let baseName = sanitizeFileName(preferredName || '');
+            if (!baseName) {
+                baseName = `video_${String(state.videoCounter++).padStart(3, '0')}.${extension}`;
+            } else if (!baseName.includes('.')) {
+                baseName = `${baseName}.${extension}`;
+            }
+            const assetPath = uniquePath(`${CONFIG.IMAGE_DIR}/${baseName}`);
+            state.packageFiles.set(assetPath, blob);
+            return assetPath;
+        }
+
         function registerSupportFile(file) {
             const fileName = sanitizeFileName(file.name || '');
             const relativePath = sanitizePath(file.webkitRelativePath || '');
@@ -987,8 +1271,8 @@
 
         function removeImageAssetIfUnused(assetPath) {
             if (!assetPath) return;
-            const stillUsed = Array.from(document.querySelectorAll('img[data-asset-path]'))
-                .some((img) => img.dataset.assetPath === assetPath);
+            const stillUsed = Array.from(document.querySelectorAll('img[data-asset-path], video[data-asset-path]'))
+                .some((media) => media.dataset.assetPath === assetPath);
             const usedByClipboard = state.clipboardImage && state.clipboardImage.assetPath === assetPath;
             if (!stillUsed && !usedByClipboard) state.packageFiles.delete(assetPath);
         }
@@ -999,6 +1283,7 @@
                 .some((iframe) => iframe.dataset.filename === fileName);
             if (!stillUsed) state.packageFiles.delete(fileName);
         }
+
 
         // === 패키지 로드 ===
         function triggerPackageLoad() {
@@ -1126,7 +1411,9 @@
             state.requiredAssets.clear();
             state.clipboardImage = null;
             state.selectedImage = null;
+            state.textEditingElement = null;
             state.imageCounter = 1;
+            state.videoCounter = 1;
             state.fileCounter = 1;
             state.lastSaveHandle = null;
             state.lastPackageFileName = ensurePackageExtension(file.name || '');
@@ -1197,6 +1484,7 @@
             slides.forEach((slide) => {
                 slide.querySelectorAll('.draggable-img').forEach((wrapper) => {
                     wrapper.classList.remove('selected');
+                    wrapper.classList.remove('iframe-interactive');
                     let handle = wrapper.querySelector('.resize-handle');
                     if (!handle) {
                         handle = document.createElement('div');
@@ -1204,6 +1492,9 @@
                         wrapper.appendChild(handle);
                     }
                     setupInteraction(wrapper, handle);
+                    if (wrapper.classList.contains('draggable-text')) {
+                        initializeTextBox(wrapper);
+                    }
 
                     const img = wrapper.querySelector('img');
                     if (!img) return;
@@ -1228,6 +1519,17 @@
                     const wrapper = iframe.closest('.draggable-iframe');
                     if (wrapper) ensureIframeControls(wrapper);
                 });
+
+                slide.querySelectorAll('video').forEach((video) => {
+                    const srcPath = normalizeAssetPath(video.getAttribute('src')) || video.dataset.assetPath;
+                    if (!srcPath || !state.packageFiles.has(srcPath)) return;
+                    const blob = state.packageFiles.get(srcPath);
+                    const url = URL.createObjectURL(blob);
+                    video.dataset.assetPath = srcPath;
+                    video.src = url;
+                    video.controls = true;
+                    video.playsInline = true;
+                });
             });
 
             state.currentSlideIndex = 0;
@@ -1241,6 +1543,7 @@
                 alert(`레거시 base64 이미지 ${legacyConvertedCount}개를 에셋으로 변환했습니다.\n저장하면 최신 패키지로 정리됩니다.`);
             }
         }
+
 
         // === 썸네일 ===
         function scheduleThumbnailRefresh() {
@@ -1308,6 +1611,13 @@
                     placeholder.textContent = label;
                     iframe.replaceWith(placeholder);
                 });
+                clone.querySelectorAll('video').forEach((video) => {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'thumbnail-video-placeholder';
+                    const label = video.dataset.assetPath || 'VIDEO';
+                    placeholder.textContent = label;
+                    video.replaceWith(placeholder);
+                });
                 clone.querySelectorAll('.iframe-notice').forEach(el => el.remove());
                 clone.querySelectorAll('.iframe-controls').forEach(el => el.remove());
 
@@ -1349,6 +1659,7 @@
                 activeThumb.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             }
         }
+
 
         // === 클립보드/요소 상태 ===
         function getElementStyleNumber(element, prop, fallback) {
@@ -1421,6 +1732,7 @@
             createDraggableImageFromAsset(state.clipboardImage.assetPath, state.clipboardImage);
         }
 
+
         // === 초기화 ===
         function init() {
             bindEvents();
@@ -1458,6 +1770,7 @@
 
             loadFromUrl(packageUrl);
         })();
+
 
 
         // === 슬라이드 네비게이션 ===
@@ -1515,6 +1828,10 @@
                 if (img.dataset.assetPath) imageAssets.add(img.dataset.assetPath);
             });
 
+            slide.querySelectorAll('video[data-asset-path]').forEach((video) => {
+                if (video.dataset.assetPath) imageAssets.add(video.dataset.assetPath);
+            });
+
             slide.querySelectorAll('iframe').forEach((iframe) => {
                 const fileName = iframe.dataset.filename || normalizeAssetPath(iframe.getAttribute('src'));
                 if (fileName) htmlAssets.add(fileName);
@@ -1568,8 +1885,32 @@
             renderThumbnails();
         }
 
+
         // === 입력/네비게이션 이벤트 ===
         function bindEvents() {
+            if (dom.navPrev) dom.navPrev.addEventListener('click', prevSlide);
+            if (dom.navNext) dom.navNext.addEventListener('click', nextSlide);
+            if (dom.ratioBtn) dom.ratioBtn.addEventListener('click', toggleAspectRatio);
+            if (dom.fitBtn) dom.fitBtn.addEventListener('click', toggleDisplayMode);
+            if (dom.invertBtn) dom.invertBtn.addEventListener('click', toggleInvertMode);
+            if (dom.fsBtn) dom.fsBtn.addEventListener('click', startPresentation);
+            if (dom.addSlideBtn) dom.addSlideBtn.addEventListener('click', addNewSlide);
+            if (dom.addTextBtn) dom.addTextBtn.addEventListener('click', createDraggableTextBox);
+            if (dom.fontBoldBtn) dom.fontBoldBtn.addEventListener('click', toggleTextBold);
+            if (dom.deleteSlideBtn) dom.deleteSlideBtn.addEventListener('click', deleteCurrentSlide);
+            if (dom.deleteElementBtn) dom.deleteElementBtn.addEventListener('click', deleteSelectedImage);
+            if (dom.openPackageBtn) dom.openPackageBtn.addEventListener('click', triggerPackageLoad);
+            if (dom.saveBtn) dom.saveBtn.addEventListener('click', savePackage);
+            if (dom.saveAsBtn) dom.saveAsBtn.addEventListener('click', savePackageAs);
+
+            const handleTextControlChange = () => applyTextControlsToSelection();
+            if (dom.fontFamilySelect) dom.fontFamilySelect.addEventListener('change', handleTextControlChange);
+            if (dom.fontSizeInput) {
+                dom.fontSizeInput.addEventListener('input', handleTextControlChange);
+                dom.fontSizeInput.addEventListener('change', handleTextControlChange);
+            }
+            if (dom.fontColorInput) dom.fontColorInput.addEventListener('input', handleTextControlChange);
+
             window.addEventListener('resize', resizeStage);
 
             window.addEventListener('wheel', (e) => {
@@ -1588,6 +1929,8 @@
                     e.preventDefault();
                     return;
                 }
+                if (e.target.closest('.draggable-video')) return;
+                if (isTextEditingActive(e.target)) return;
                 if (e.deltaY > 0) nextSlide(); else prevSlide();
             }, { passive: false });
 
@@ -1609,6 +1952,8 @@
 
             window.addEventListener('contextmenu', (e) => {
                 e.preventDefault(); 
+                if (e.target.closest('.draggable-iframe')) return;
+                if (e.target.closest('.draggable-video')) return;
                 if (document.body.classList.contains('is-fullscreen')) {
                     if (state.currentSlideIndex === 0) return;
                     prevSlide(); 
@@ -1621,6 +1966,7 @@
                 if (!document.body.classList.contains('is-fullscreen')) return;
                 if (e.target.closest('button') || e.target.closest('.nav-zone')) return;
                 if (e.target.closest('.draggable-iframe')) return;
+                if (e.target.closest('.draggable-video')) return;
 
                 const slides = refreshSlides();
                 if (state.currentSlideIndex >= slides.length - 1) {
@@ -1635,6 +1981,18 @@
             window.addEventListener('keydown', (e) => {
                 const isModKey = e.ctrlKey || e.metaKey;
                 const key = e.key.toLowerCase();
+                const isTextEditing = isTextEditingActive(e.target);
+
+                if (isTextEditing) {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        exitTextEditing();
+                    }
+                    return;
+                }
+
+                const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+                if (isFormField) return;
 
                 if (e.code === 'Space' || e.key === ' ') {
                     if (!state.isSpacePressed) {
@@ -1645,7 +2003,8 @@
                     return;
                 }
 
-                if (isModKey && key === 'c' && state.selectedImage) {
+                const canCopyImage = state.selectedImage && state.selectedImage.querySelector('img[data-asset-path]');
+                if (isModKey && key === 'c' && canCopyImage) {
                     e.preventDefault();
                     copySelectedImage();
                     return;
@@ -1698,7 +2057,20 @@
                 e.preventDefault();
                 stage.classList.remove('drag-over');
                 const files = e.dataTransfer.files;
-                if (files.length > 0) handleDroppedFiles(files, { supportOnly: e.shiftKey || e.altKey });
+                if (files.length > 0) {
+                    handleDroppedFiles(files, { supportOnly: e.shiftKey || e.altKey });
+                    return;
+                }
+                const urlText = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+                const url = parseUrlCandidate(urlText);
+                if (url && isVideoUrl(url)) {
+                    createDraggableVideoFromUrl(url);
+                    return;
+                }
+                const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
+                if (youtubeEmbed) {
+                    createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video' });
+                }
             });
 
             document.addEventListener('dragover', (e) => { e.preventDefault(); });
@@ -1708,17 +2080,38 @@
             });
 
             window.addEventListener('paste', (e) => {
+                if (isTextEditingActive(e.target)) return;
+                const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+                if (isFormField) return;
                 const items = (e.clipboardData || e.originalEvent.clipboardData).items;
                 for (let item of items) {
                     if (item.type.includes('image')) {
                         const blob = item.getAsFile();
                         if (blob) createDraggableImageFromBlob(blob);
+                    } else if (item.type === 'text/plain' || item.type === 'text/uri-list') {
+                        item.getAsString((text) => {
+                            const url = parseUrlCandidate(text);
+                            if (url && isVideoUrl(url)) {
+                                createDraggableVideoFromUrl(url);
+                                return;
+                            }
+                            const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
+                            if (youtubeEmbed) {
+                                createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video' });
+                            }
+                        });
                     }
                 }
             });
 
             document.addEventListener('mousedown', (e) => {
-                if (!e.target.closest('.draggable-img') && !e.target.closest('button') && !e.target.closest('.nav-zone')) deselectImage();
+                if (state.textEditingElement) {
+                    const editingBox = getTextBox(state.textEditingElement);
+                    if (editingBox && !editingBox.contains(e.target)) exitTextEditing();
+                }
+                if (!e.target.closest('.draggable-img') && !e.target.closest('button') && !e.target.closest('.nav-zone') && !e.target.closest('.text-controls')) {
+                    deselectImage();
+                }
             });
 
             document.addEventListener('mousedown', (e) => {
@@ -1758,6 +2151,7 @@
                 if (!state.activeIframePan) return;
                 state.activeIframePan = null;
                 document.body.classList.remove('is-panning');
+                showSaveButton();
             });
 
             const handleMouseActivity = () => {
@@ -1792,6 +2186,8 @@
 
                 if (file.type.startsWith('image/')) {
                     createDraggableImageFromBlob(file, file.name);
+                } else if (file.type.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(fileName)) {
+                    createDraggableVideoFromBlob(file, file.name);
                 } else if (fileName.endsWith('.html') || fileName.endsWith('.htm') || file.type === 'text/html') {
                     transformCurrentSlideToHtml(file);
                 } else {
@@ -1859,7 +2255,374 @@
             showSaveButton();
         }
 
+
         // === 클립보드 이미지 붙여넣기 ===
+
+        function createDraggableVideoFromSource(source, assetPath) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-video selected';
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            const width = 640;
+            const height = 360;
+            wrapper.style.left = `${cw - (width / 2)}px`;
+            wrapper.style.top = `${ch - (height / 2)}px`;
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+
+            const video = document.createElement('video');
+            video.src = source;
+            video.controls = true;
+            video.playsInline = true;
+            video.preload = 'metadata';
+            if (assetPath) video.dataset.assetPath = assetPath;
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(video);
+            wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            showSaveButton();
+        }
+
+        function createDraggableVideoFromBlob(blob, preferredName) {
+            const assetPath = registerVideoAsset(blob, preferredName);
+            const objectUrl = URL.createObjectURL(blob);
+            createDraggableVideoFromSource(objectUrl, assetPath);
+        }
+
+        function createDraggableVideoFromUrl(url) {
+            createDraggableVideoFromSource(url, null);
+        }
+
+        function createDraggableIframeFromUrl(url, options = {}) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-iframe selected';
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            const width = 640;
+            const height = 360;
+            wrapper.style.left = `${cw - (width / 2)}px`;
+            wrapper.style.top = `${ch - (height / 2)}px`;
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.allowFullscreen = true;
+            iframe.setAttribute('allow', options.allow || 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+            if (options.title) iframe.setAttribute('title', options.title);
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            const notice = document.createElement('div');
+            notice.className = 'iframe-notice';
+            const label = options.label || getUrlHostLabel(url);
+            notice.textContent = `🌐 ${label}`;
+
+            wrapper.appendChild(iframe);
+            wrapper.appendChild(handle);
+            wrapper.appendChild(notice);
+            activeSlide.appendChild(wrapper);
+
+            ensureIframeControls(wrapper);
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            showSaveButton();
+        }
+
+        function normalizeFontList(value) {
+            return String(value || '')
+                .split(',')
+                .map(entry => entry.replace(/['"]/g, '').trim().toLowerCase())
+                .filter(Boolean);
+        }
+
+        function pickFontFamilyOption(fontFamily) {
+            if (!dom.fontFamilySelect) return '';
+            const families = normalizeFontList(fontFamily);
+            const options = Array.from(dom.fontFamilySelect.options);
+            for (const option of options) {
+                const optionFamilies = normalizeFontList(option.value);
+                if (optionFamilies.some((family) => families.includes(family))) {
+                    return option.value;
+                }
+            }
+            return dom.fontFamilySelect.value || (options[0] ? options[0].value : '');
+        }
+
+        function parseFontSize(value, fallback) {
+            const parsed = Number.parseFloat(value);
+            return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
+        }
+
+        function isFontWeightBold(value) {
+            if (!value) return false;
+            const normalized = String(value).toLowerCase();
+            if (normalized === 'bold' || normalized === 'bolder') return true;
+            const numeric = Number.parseInt(normalized, 10);
+            return Number.isFinite(numeric) && numeric >= 600;
+        }
+
+        function toHexColor(value, fallback) {
+            if (!value) return fallback;
+            const trimmed = value.trim();
+            if (trimmed.startsWith('#')) {
+                if (trimmed.length === 4) {
+                    const r = trimmed[1];
+                    const g = trimmed[2];
+                    const b = trimmed[3];
+                    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+                }
+                if (trimmed.length === 7) return trimmed.toLowerCase();
+            }
+            const match = trimmed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+            if (match) {
+                const [r, g, b] = match.slice(1, 4).map(Number);
+                if ([r, g, b].every(Number.isFinite)) {
+                    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+                }
+            }
+            return fallback;
+        }
+
+        function isTextWrapper(wrapper) {
+            return !!(wrapper && wrapper.classList.contains('draggable-text'));
+        }
+
+        function getTextBox(wrapper) {
+            if (!isTextWrapper(wrapper)) return null;
+            return wrapper.querySelector('.text-box');
+        }
+
+        function getTextStyleFromBox(box) {
+            if (!box) return { ...state.textDefaults };
+            const computed = window.getComputedStyle(box);
+            const fontFamily = box.style.fontFamily || computed.fontFamily || state.textDefaults.fontFamily;
+            const fontSizeValue = box.style.fontSize || computed.fontSize;
+            const fontSize = parseFontSize(fontSizeValue, state.textDefaults.fontSize);
+            const fontColor = toHexColor(box.style.color || computed.color, state.textDefaults.fontColor);
+            const fontWeight = box.style.fontWeight || computed.fontWeight;
+            const fontBold = isFontWeightBold(fontWeight);
+            return { fontFamily, fontSize, fontColor, fontBold };
+        }
+
+        function applyTextStyleToBox(box, style) {
+            if (!box || !style) return;
+            if (style.fontFamily) box.style.fontFamily = style.fontFamily;
+            if (style.fontSize) box.style.fontSize = `${style.fontSize}px`;
+            if (style.fontColor) box.style.color = style.fontColor;
+            if (typeof style.fontBold === 'boolean') {
+                box.style.fontWeight = style.fontBold ? '700' : '400';
+            }
+        }
+
+        function readTextControlValues() {
+            const current = state.textDefaults || {};
+            const next = {
+                fontFamily: current.fontFamily,
+                fontSize: current.fontSize,
+                fontColor: current.fontColor,
+                fontBold: current.fontBold
+            };
+
+            if (dom.fontFamilySelect && dom.fontFamilySelect.value) {
+                next.fontFamily = dom.fontFamilySelect.value;
+            }
+
+            if (dom.fontSizeInput) {
+                const min = Number.parseInt(dom.fontSizeInput.min, 10) || 8;
+                const max = Number.parseInt(dom.fontSizeInput.max, 10) || 200;
+                let fontSize = parseFontSize(dom.fontSizeInput.value, next.fontSize);
+                if (!Number.isFinite(fontSize)) fontSize = next.fontSize;
+                fontSize = Math.min(Math.max(fontSize, min), max);
+                dom.fontSizeInput.value = fontSize;
+                next.fontSize = fontSize;
+            }
+
+            if (dom.fontColorInput && dom.fontColorInput.value) {
+                next.fontColor = dom.fontColorInput.value;
+            }
+
+            if (dom.fontBoldBtn) {
+                next.fontBold = dom.fontBoldBtn.classList.contains('is-active');
+            }
+
+            return next;
+        }
+
+        function setBoldControlState(isBold) {
+            if (!dom.fontBoldBtn) return;
+            const next = !!isBold;
+            dom.fontBoldBtn.classList.toggle('is-active', next);
+            dom.fontBoldBtn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        }
+
+        function syncTextControls(wrapper) {
+            if (!dom.fontFamilySelect || !dom.fontSizeInput || !dom.fontColorInput) return;
+            const box = isTextWrapper(wrapper) ? getTextBox(wrapper) : null;
+            const style = box ? getTextStyleFromBox(box) : state.textDefaults;
+            const matchedFont = pickFontFamilyOption(style.fontFamily);
+            if (matchedFont) dom.fontFamilySelect.value = matchedFont;
+            dom.fontSizeInput.value = style.fontSize;
+            dom.fontColorInput.value = toHexColor(style.fontColor, state.textDefaults.fontColor);
+            setBoldControlState(style.fontBold);
+            state.textDefaults = {
+                fontFamily: dom.fontFamilySelect.value || style.fontFamily,
+                fontSize: parseFontSize(dom.fontSizeInput.value, style.fontSize),
+                fontColor: dom.fontColorInput.value || style.fontColor,
+                fontBold: dom.fontBoldBtn ? dom.fontBoldBtn.classList.contains('is-active') : !!style.fontBold
+            };
+        }
+
+        function applyTextControlsToSelection() {
+            const next = readTextControlValues();
+            state.textDefaults = next;
+            const wrapper = state.selectedImage;
+            if (isTextWrapper(wrapper)) {
+                const box = getTextBox(wrapper);
+                if (box) {
+                    applyTextStyleToBox(box, next);
+                    showSaveButton();
+                }
+            }
+        }
+
+        function toggleTextBold() {
+            if (!dom.fontBoldBtn) return;
+            const isActive = !dom.fontBoldBtn.classList.contains('is-active');
+            setBoldControlState(isActive);
+            applyTextControlsToSelection();
+        }
+
+        function enterTextEditing(wrapper) {
+            if (document.body.classList.contains('is-fullscreen')) return;
+            if (!isTextWrapper(wrapper)) return;
+            const box = getTextBox(wrapper);
+            if (!box) return;
+            if (state.textEditingElement && state.textEditingElement !== wrapper) {
+                exitTextEditing();
+            }
+            if (state.selectedImage !== wrapper) {
+                selectImage(wrapper);
+            }
+            state.textEditingElement = wrapper;
+            wrapper.classList.add('editing');
+            box.setAttribute('contenteditable', 'true');
+            box.focus({ preventScroll: true });
+            syncTextControls(wrapper);
+        }
+
+        function exitTextEditing() {
+            const wrapper = state.textEditingElement;
+            if (!wrapper) return;
+            const box = getTextBox(wrapper);
+            if (box) {
+                box.setAttribute('contenteditable', 'false');
+            }
+            wrapper.classList.remove('editing');
+            state.textEditingElement = null;
+        }
+
+        function isTextEditingActive(target) {
+            if (state.textEditingElement) {
+                if (document.body.contains(state.textEditingElement)) return true;
+                state.textEditingElement = null;
+            }
+            const node = target || document.activeElement;
+            return !!(node && node.closest && node.closest('.text-box[contenteditable="true"]'));
+        }
+
+        function initializeTextBox(wrapper, options = {}) {
+            if (!isTextWrapper(wrapper)) return;
+            if (wrapper._textInitialized) return;
+            wrapper._textInitialized = true;
+            const box = getTextBox(wrapper);
+            if (!box) return;
+
+            box.setAttribute('spellcheck', 'false');
+            if (!box.dataset.placeholder) box.dataset.placeholder = '텍스트 입력';
+            box.setAttribute('contenteditable', 'false');
+
+            if (!box.style.fontFamily && state.textDefaults.fontFamily) {
+                box.style.fontFamily = state.textDefaults.fontFamily;
+            }
+            if (!box.style.fontSize && state.textDefaults.fontSize) {
+                box.style.fontSize = `${state.textDefaults.fontSize}px`;
+            }
+            if (!box.style.color && state.textDefaults.fontColor) {
+                box.style.color = state.textDefaults.fontColor;
+            }
+            if (!box.style.fontWeight && state.textDefaults.fontBold) {
+                box.style.fontWeight = '700';
+            }
+
+            box.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                enterTextEditing(wrapper);
+            });
+
+            box.addEventListener('blur', () => {
+                if (state.textEditingElement === wrapper) exitTextEditing();
+            });
+
+            box.addEventListener('input', () => {
+                showSaveButton();
+            });
+
+            if (options.autoEdit) {
+                enterTextEditing(wrapper);
+            }
+        }
+
+        function createDraggableTextBox() {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-text selected';
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            const width = 360;
+            const height = 140;
+            wrapper.style.left = `${cw - (width / 2)}px`;
+            wrapper.style.top = `${ch - (height / 2)}px`;
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+
+            const textBox = document.createElement('div');
+            textBox.className = 'text-box';
+            textBox.dataset.placeholder = '텍스트 입력';
+            textBox.setAttribute('contenteditable', 'false');
+            textBox.setAttribute('spellcheck', 'false');
+            applyTextStyleToBox(textBox, state.textDefaults);
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(textBox);
+            wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            initializeTextBox(wrapper, { autoEdit: true });
+            showSaveButton();
+        }
 
         function createDraggableImageFromBlob(blob, preferredName) {
             const activeSlide = getActiveSlide();
@@ -1900,9 +2663,15 @@
         // === 드래그/리사이즈 인터랙션 ===
         function setupInteraction(element, handle) {
             element.addEventListener('mousedown', (e) => {
-                if (document.body.classList.contains('is-fullscreen')) return;
+                const isFullscreen = document.body.classList.contains('is-fullscreen');
+                const isIframe = element.classList.contains('draggable-iframe');
+                if (isFullscreen && !isIframe) return;
                 if (state.isSpacePressed && element.classList.contains('draggable-iframe')) return;
                 if (e.target === handle) return; 
+                if (element.classList.contains('draggable-text') && state.textEditingElement === element) {
+                    if (e.target.closest('.text-box')) return;
+                    exitTextEditing();
+                }
                 
                 e.stopPropagation(); selectImage(element);
                 
@@ -1934,14 +2703,23 @@
 
                 e.stopPropagation(); e.preventDefault();
                 const startX = e.clientX;
+                const startY = e.clientY;
                 const startWidth = parseFloat(getComputedStyle(element).width);
                 const startHeight = parseFloat(getComputedStyle(element).height);
                 const aspectRatio = startWidth / startHeight;
+                const isText = element.classList.contains('draggable-text');
 
                 function onMouseMove(e) {
                     const dx = (e.clientX - startX) / state.currentScaleX;
+                    const dy = (e.clientY - startY) / state.currentScaleY;
                     const newWidth = startWidth + dx;
-                    
+                    if (isText) {
+                        const newHeight = startHeight + dy;
+                        element.style.width = Math.max(newWidth, 80) + 'px';
+                        element.style.height = Math.max(newHeight, 40) + 'px';
+                        return;
+                    }
+
                     if (newWidth > 50) {
                         element.style.width = newWidth + 'px';
                         element.style.height = (newWidth / aspectRatio) + 'px';
@@ -1961,13 +2739,28 @@
             });
         }
 
+
         // === 저장/패키지 ===
-        function selectImage(el) { deselectImage(); state.selectedImage = el; el.classList.add('selected'); }
-        function deselectImage() { if (state.selectedImage) { state.selectedImage.classList.remove('selected'); state.selectedImage = null; } }
+        function selectImage(el) {
+            deselectImage();
+            state.selectedImage = el;
+            el.classList.add('selected');
+            syncTextControls(el);
+        }
+        function deselectImage() {
+            if (state.selectedImage) {
+                state.selectedImage.classList.remove('selected');
+                state.selectedImage = null;
+            }
+            exitTextEditing();
+            syncTextControls(null);
+        }
         function deleteSelectedImage() {
             if (!state.selectedImage) return;
+            if (state.textEditingElement === state.selectedImage) exitTextEditing();
             const img = state.selectedImage.querySelector('img[data-asset-path]');
-            const assetPath = img ? img.dataset.assetPath : null;
+            const video = state.selectedImage.querySelector('video[data-asset-path]');
+            const assetPath = img ? img.dataset.assetPath : (video ? video.dataset.assetPath : null);
             const iframe = state.selectedImage.querySelector('iframe[data-filename]');
             const htmlFileName = iframe ? iframe.dataset.filename : null;
             state.selectedImage.remove();
@@ -2119,6 +2912,13 @@
                     iframe.setAttribute('src', './' + iframe.dataset.filename);
                 }
             });
+            clone.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                wrapper.classList.remove('iframe-interactive');
+            });
+            clone.querySelectorAll('.iframe-play-toggle').forEach((toggle) => {
+                toggle.textContent = '재생';
+                toggle.title = '재생 모드';
+            });
 
             const images = clone.querySelectorAll('img[data-asset-path]');
             images.forEach(img => {
@@ -2126,6 +2926,15 @@
                 if (assetPath) {
                     img.setAttribute('src', './' + assetPath);
                     img.removeAttribute('data-asset-path');
+                }
+            });
+
+            const videos = clone.querySelectorAll('video[data-asset-path]');
+            videos.forEach(video => {
+                const assetPath = video.getAttribute('data-asset-path');
+                if (assetPath) {
+                    video.setAttribute('src', './' + assetPath);
+                    video.removeAttribute('data-asset-path');
                 }
             });
 
@@ -2197,6 +3006,7 @@
             alert("다운로드 폴더에 패키지 파일로 저장되었습니다!\n압축을 풀고 '" + mainFileName + "'을 실행하세요.");
         }
 
+
         // === 전체화면 ===
         function startPresentation() {
             const elem = document.documentElement;
@@ -2239,7 +3049,6 @@
             }
             resizeStage(); // 상태 변경 시 크기 재계산 (여백 제거/복구)
         }
-        
     </script>
 </body>
 </html>

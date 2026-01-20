@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Presentation Tool (Fixed Ratio)</title>
+    <style>
+/* @inline-style */
+    </style>
+</head>
+<body>
+
+    <!-- 양쪽 네비게이션 버튼 -->
+    <div id="nav-prev" class="nav-zone" data-action="prevSlide">❮</div>
+    <div id="nav-next" class="nav-zone" data-action="nextSlide">❯</div>
+
+    <!-- 상단 UI 컨트롤 -->
+    <div id="ui-controls">
+        <button id="ratio-btn" class="mode-btn" data-action="toggleAspectRatio">비율: 16:9</button>
+        <button id="fit-btn" class="mode-btn" data-action="toggleDisplayMode">화면: 맞춤</button>
+        <button id="invert-btn" class="mode-btn" data-action="toggleInvertMode">색상: 기본</button>
+        <div class="text-controls">
+            <button id="add-text-btn" data-action="addTextBox">T 텍스트</button>
+            <button id="font-bold-btn" class="toggle-btn" type="button" aria-pressed="false" title="굵게">B</button>
+            <select id="font-family-select" aria-label="글꼴">
+                <option value="'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif">Noto Sans KR</option>
+                <option value="'Noto Serif KR', 'Nanum Myeongjo', 'Times New Roman', serif">Noto Serif KR</option>
+                <option value="'Nanum Gothic', 'Malgun Gothic', 'Segoe UI', sans-serif">Nanum Gothic</option>
+                <option value="'Nanum Myeongjo', 'Times New Roman', serif">Nanum Myeongjo</option>
+                <option value="'D2Coding', 'Consolas', 'Courier New', monospace">D2Coding</option>
+            </select>
+            <input id="font-size-input" type="number" min="8" max="200" value="32" aria-label="글꼴 크기" />
+            <input id="font-color-input" type="color" value="#111111" aria-label="글꼴 색상" />
+        </div>
+        <button id="fs-btn" data-action="startPresentation">🖥️ 발표 시작</button>
+        <div class="ui-spacer"></div>
+        <button id="add-slide-btn" data-action="addNewSlide">+ 새 슬라이드</button>
+        <button id="delete-slide-btn" data-action="deleteCurrentSlide">현재 삭제</button>
+        <button id="delete-element-btn" data-action="deleteSelectedImage">요소 삭제(Del)</button>
+        <button id="open-package-btn" data-action="triggerPackageLoad">📂 열기</button>
+        <button id="save-btn" data-action="savePackage">💾 저장</button>
+        <button id="save-as-btn" data-action="savePackageAs">📄 다른 이름 저장</button>
+    </div>
+
+    <!-- 슬라이드 스테이지 -->
+    <div id="slide-stage">
+        <!-- [1페이지] -->
+        <div class="slide active"></div>
+    </div>
+
+    <div id="page-indicator">1 / 1</div>
+    <div id="thumbnail-strip" aria-label="슬라이드 미리보기"></div>
+    <input type="file" id="package-input" accept=".altppt,.zip" style="display:none" />
+
+    <script type="module">
+/* @inline-script */
+    </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+        const dom = {
+            indicator: document.getElementById('page-indicator'),
+            navPrev: document.getElementById('nav-prev'),
+            navNext: document.getElementById('nav-next'),
+            saveBtn: document.getElementById('save-btn'),
+            saveAsBtn: document.getElementById('save-as-btn'),
+            thumbnailStrip: document.getElementById('thumbnail-strip'),
+            packageInput: document.getElementById('package-input'),
+            stage: document.getElementById('slide-stage'),
+            ratioBtn: document.getElementById('ratio-btn'),
+            fitBtn: document.getElementById('fit-btn'),
+            invertBtn: document.getElementById('invert-btn'),
+            fsBtn: document.getElementById('fs-btn'),
+            addSlideBtn: document.getElementById('add-slide-btn'),
+            deleteSlideBtn: document.getElementById('delete-slide-btn'),
+            deleteElementBtn: document.getElementById('delete-element-btn'),
+            openPackageBtn: document.getElementById('open-package-btn'),
+            addTextBtn: document.getElementById('add-text-btn'),
+            fontBoldBtn: document.getElementById('font-bold-btn'),
+            fontFamilySelect: document.getElementById('font-family-select'),
+            fontSizeInput: document.getElementById('font-size-input'),
+            fontColorInput: document.getElementById('font-color-input')
+        };

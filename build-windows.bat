@@ -2,7 +2,8 @@
 setlocal
 set "ROOT=%~dp0"
 pushd "%ROOT%" >nul
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%build-windows.ps1"
+set "ROOT_DRIVE=%CD%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DRIVE%\\build-windows.ps1"
 set "CODE=%ERRORLEVEL%"
 popd >nul
 if %CODE% neq 0 (

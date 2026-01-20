@@ -16,6 +16,13 @@ if (-not $sdkList) {
     throw "No .NET SDKs found. Install .NET SDK 6+ and try again."
 }
 
+$webBuildScript = Join-Path $root "scripts\\build-player.ps1"
+if (-not (Test-Path $webBuildScript)) {
+    throw "Web build script not found: $webBuildScript"
+}
+Write-Host "Building web player..."
+& $webBuildScript
+
 $distRoot = Join-Path $root "dist"
 $distDir = Join-Path $distRoot "AltPptPlayer"
 if (Test-Path $distRoot) {

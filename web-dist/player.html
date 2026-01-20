@@ -1,0 +1,4019 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Presentation Tool (Fixed Ratio)</title>
+    <style>
+        /* [스타일] 기본 설정 */
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            background-color: #333; /* PPT 편집기처럼 어두운 배경 */
+            color: #333;
+            font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
+            overflow: hidden; 
+            user-select: none; 
+            height: 100vh;
+            width: 100vw;
+            position: relative; /* Flex 제거하고 absolute 위치 지정을 위해 relative */
+        }
+
+        /* [슬라이드 스테이지] - 수정됨: Absolute Centering */
+        #slide-stage {
+            /* 초기값은 16:9 */
+            width: 1280px;
+            height: 720px;
+            background-color: white;
+            position: absolute; /* 절대 위치 */
+            top: 50%; left: 50%; /* 화면 중앙 기준 */
+            /* transform은 JS에서 제어: translate(-50%, -50%) scale(...) */
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+            transform-origin: center center;
+            transition: width 0.3s, height 0.3s; /* 비율 변경 시 애니메이션 */
+        }
+
+        /* 드래그 앤 드롭 활성화 시 효과 (스테이지에 적용) */
+        #slide-stage.drag-over {
+            border: 5px dashed #2196f3;
+            background-color: #f0f8ff;
+        }
+
+        /* [슬라이드] 개별 페이지 */
+        .slide {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: none;
+        }
+        .slide.active { display: block; }
+
+        /* [이미지] 드래그 및 리사이즈 가능 스타일 */
+        .draggable-img {
+            position: absolute; 
+            cursor: move; 
+            border: 2px solid transparent; 
+            min-width: 50px;
+            min-height: 50px;
+        }
+
+        .draggable-text {
+            padding: 6px;
+        }
+
+        .draggable-text .text-box {
+            width: 100%;
+            height: 100%;
+            outline: none;
+            cursor: text;
+            user-select: text;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .draggable-text .text-box:empty::before {
+            content: attr(data-placeholder);
+            color: #888;
+        }
+        
+        .draggable-img.selected {
+            border: 2px solid #007bff; 
+            z-index: 1000; 
+        }
+
+        .draggable-video video {
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: #000;
+        }
+
+        .resize-handle {
+            width: 15px; height: 15px;
+            background: #007bff;
+            position: absolute;
+            right: -5px; bottom: -5px;
+            cursor: se-resize; 
+            display: none; 
+            z-index: 1001;
+        }
+        .draggable-img.selected .resize-handle {
+            display: block; 
+        }
+
+        .draggable-iframe iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            will-change: transform;
+            transform-origin: 0 0;
+        }
+
+        .draggable-iframe {
+            overflow: hidden;
+        }
+
+        .draggable-iframe.iframe-interactive iframe {
+            pointer-events: auto;
+        }
+
+        body.pan-mode .draggable-iframe:not(.iframe-interactive) iframe {
+            pointer-events: none !important;
+        }
+
+        body.pan-mode {
+            cursor: grab;
+        }
+
+        body.pan-mode.is-panning {
+            cursor: grabbing;
+        }
+
+        /* [외부 HTML - iframe] 창 안의 창 스타일 */
+        .iframe-container {
+            width: 100%; 
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            background: white;
+        }
+
+        iframe {
+            width: 100%; height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* [텍스트] 가이드 문구 */
+        .guide-text {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #999;
+            pointer-events: none; 
+            width: 80%;
+        }
+        .guide-text h1 { font-size: 40px; margin-bottom: 20px; color: #555; }
+        .guide-text p { font-size: 20px; line-height: 1.6; }
+
+        /* [HTML 알림바] */
+        .iframe-notice {
+            display: none !important;
+        }
+
+        .iframe-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 6px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            font-size: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 2001;
+        }
+
+        .draggable-iframe:hover .iframe-controls {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .iframe-controls .iframe-control-btn {
+            padding: 2px 6px;
+            font-size: 11px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: none;
+        }
+
+        .iframe-controls .iframe-control-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .iframe-scale-label {
+            min-width: 44px;
+            text-align: center;
+        }
+
+        /* [UI] 상단 컨트롤 패널 */
+        #ui-controls {
+            position: fixed;
+            top: 20px; right: 20px;
+            z-index: 9999;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap; /* 작은 화면에서 줄바꿈 허용 */
+            justify-content: flex-end;
+            transition: opacity 0.3s;
+        }
+        .ui-spacer {
+            width: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            white-space: nowrap;
+        }
+        button:hover { background: #666; }
+        #save-btn { background: #28a745; border-color: #28a745; display: none; } 
+        #save-as-btn { background: #17a2b8; border-color: #17a2b8; display: none; }
+        #fs-btn { background: #007bff; border-color: #007bff; }
+        .mode-btn { background: #e0a800; border-color: #d39e00; color: #fff; }
+
+        .text-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .text-controls select,
+        .text-controls input[type="number"],
+        .text-controls input[type="color"] {
+            height: 32px;
+            border: 1px solid #666;
+            border-radius: 4px;
+            background: #2f2f2f;
+            color: #fff;
+            font-size: 12px;
+        }
+
+        .text-controls select,
+        .text-controls input[type="number"] {
+            padding: 0 8px;
+        }
+
+        .text-controls input[type="number"] {
+            width: 70px;
+        }
+
+        .text-controls input[type="color"] {
+            width: 34px;
+            padding: 0;
+        }
+
+        .text-controls .toggle-btn {
+            width: 34px;
+            padding: 0;
+            font-weight: 700;
+        }
+
+        .text-controls .toggle-btn.is-active {
+            background: #1f6feb;
+            border-color: #1f6feb;
+        }
+
+        /* [UI] 페이지 번호 */
+        #page-indicator {
+            position: absolute;
+            bottom: 20px; right: 20px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 9998;
+            transition: opacity 0.3s;
+        }
+
+        body:not(.is-fullscreen) #page-indicator {
+            bottom: 180px;
+        }
+
+        /* [슬라이드 썸네일 스트립] */
+        #thumbnail-strip {
+            position: fixed;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            height: 140px;
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 14px;
+            z-index: 9500;
+            backdrop-filter: blur(8px);
+        }
+
+        #thumbnail-strip::-webkit-scrollbar {
+            height: 10px;
+        }
+        #thumbnail-strip::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.08);
+            border-radius: 10px;
+        }
+        #thumbnail-strip::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.35);
+            border-radius: 10px;
+        }
+
+        .thumbnail {
+            flex: 0 0 auto;
+            width: 192px;
+            height: 108px;
+            position: relative;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            overflow: hidden;
+            background: #222;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+        }
+
+        .thumbnail.active {
+            border-color: #32a3ff;
+            box-shadow: 0 0 0 2px rgba(50,163,255,0.4), 0 6px 12px rgba(0,0,0,0.5);
+        }
+
+        .thumbnail-inner {
+            /* 썸네일 내부도 JS에서 크기 조절 예정 */
+            width: 1280px;
+            height: 720px;
+            transform: scale(0.15);
+            transform-origin: top left;
+            pointer-events: none;
+            position: relative;
+            background: white;
+        }
+
+        .thumbnail .slide {
+            display: block;
+        }
+
+        .thumbnail-iframe-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f1f1;
+            color: #666;
+            font-size: 40px;
+            border: 4px dashed #bbb;
+        }
+
+        .thumbnail-video-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f0f0f;
+            color: #e6e6e6;
+            font-size: 28px;
+            border: 3px dashed #444;
+        }
+
+        .thumbnail-label {
+            position: absolute;
+            left: 6px;
+            top: 6px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        /* [네비게이션] 양쪽 영역 */
+        .nav-zone {
+            position: fixed;
+            top: 0;
+            height: 100%;
+            width: 80px; 
+            z-index: 9000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0; 
+            transition: opacity 0.3s ease;
+            cursor: pointer;
+            color: rgba(255,255,255,0.5);
+            font-size: 60px;
+            font-weight: bold;
+        }
+        
+        .nav-zone:hover {
+            opacity: 1;
+            background: linear-gradient(to right, rgba(0,0,0,0.5), transparent);
+        }
+        #nav-next.nav-zone:hover {
+            background: linear-gradient(to left, rgba(0,0,0,0.5), transparent);
+        }
+        
+        #nav-prev { left: 0; }
+        #nav-next { right: 0; }
+
+        /* [전체화면 모드 스타일] */
+        body.is-fullscreen #ui-controls,
+        body.is-fullscreen #page-indicator,
+        body.is-fullscreen #thumbnail-strip,
+        body.is-fullscreen .resize-handle { display: none !important; }
+        
+        body.is-fullscreen .draggable-img.selected {
+            border-color: transparent !important;
+        }
+        
+        body.is-fullscreen .draggable-img {
+            cursor: default !important; 
+        }
+        
+        body.is-fullscreen {
+            background-color: black; 
+        }
+
+        body.invert-mode #slide-stage,
+        body.invert-mode .thumbnail-inner {
+            filter: invert(1);
+        }
+
+        body.is-fullscreen.cursor-hidden,
+        body.is-fullscreen.cursor-hidden * {
+            cursor: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 양쪽 네비게이션 버튼 -->
+    <div id="nav-prev" class="nav-zone" data-action="prevSlide">❮</div>
+    <div id="nav-next" class="nav-zone" data-action="nextSlide">❯</div>
+
+    <!-- 상단 UI 컨트롤 -->
+    <div id="ui-controls">
+        <button id="ratio-btn" class="mode-btn" data-action="toggleAspectRatio">비율: 16:9</button>
+        <button id="fit-btn" class="mode-btn" data-action="toggleDisplayMode">화면: 맞춤</button>
+        <button id="invert-btn" class="mode-btn" data-action="toggleInvertMode">색상: 기본</button>
+        <div class="text-controls">
+            <button id="add-text-btn" data-action="addTextBox">T 텍스트</button>
+            <button id="font-bold-btn" class="toggle-btn" type="button" aria-pressed="false" title="굵게">B</button>
+            <select id="font-family-select" aria-label="글꼴">
+                <option value="'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif">Noto Sans KR</option>
+                <option value="'Noto Serif KR', 'Nanum Myeongjo', 'Times New Roman', serif">Noto Serif KR</option>
+                <option value="'Nanum Gothic', 'Malgun Gothic', 'Segoe UI', sans-serif">Nanum Gothic</option>
+                <option value="'Nanum Myeongjo', 'Times New Roman', serif">Nanum Myeongjo</option>
+                <option value="'D2Coding', 'Consolas', 'Courier New', monospace">D2Coding</option>
+            </select>
+            <input id="font-size-input" type="number" min="8" max="200" value="32" aria-label="글꼴 크기" />
+            <input id="font-color-input" type="color" value="#111111" aria-label="글꼴 색상" />
+        </div>
+        <button id="fs-btn" data-action="startPresentation">🖥️ 발표 시작</button>
+        <div class="ui-spacer"></div>
+        <button id="add-slide-btn" data-action="addNewSlide">+ 새 슬라이드</button>
+        <button id="delete-slide-btn" data-action="deleteCurrentSlide">현재 삭제</button>
+        <button id="delete-element-btn" data-action="deleteSelectedImage">요소 삭제(Del)</button>
+        <button id="open-package-btn" data-action="triggerPackageLoad">📂 열기</button>
+        <button id="save-btn" data-action="savePackage">💾 저장</button>
+        <button id="save-as-btn" data-action="savePackageAs">📄 다른 이름 저장</button>
+    </div>
+
+    <!-- 슬라이드 스테이지 -->
+    <div id="slide-stage">
+        <!-- [1페이지] -->
+        <div class="slide active"></div>
+    </div>
+
+    <div id="page-indicator">1 / 1</div>
+    <div id="thumbnail-strip" aria-label="슬라이드 미리보기"></div>
+    <input type="file" id="package-input" accept=".altppt,.zip" style="display:none" />
+
+    <script type="module">
+        const CONFIG = {
+            STAGE_WIDTH_16_9: 1280,
+            STAGE_HEIGHT_16_9: 720,
+            STAGE_WIDTH_4_3: 1024,
+            STAGE_HEIGHT_4_3: 768,
+            IMAGE_DIR: 'assets',
+            PACKAGE_EXTENSION: 'altppt',
+            THUMB_SCALE: 0.15,
+            CURSOR_HIDE_DELAY_MS: 3000,
+            IFRAME_SCALE_STEP: 0.1,
+            IFRAME_SCALE_MIN: 0.2,
+            IFRAME_SCALE_MAX: 3
+        };
+
+        const state = {
+            currentScaleX: 1,
+            currentScaleY: 1,
+            currentSlideIndex: 0,
+            slides: [],
+            selectedImage: null,
+            packageFiles: new Map(),
+            requiredAssets: new Set(),
+            assetIndex: new Map(),
+            assetPathToId: new Map(),
+            assetObjectUrls: new Map(),
+            imageCounter: 1,
+            videoCounter: 1,
+            fileCounter: 1,
+            documentId: '',
+            documentCounter: 1,
+            slideCounter: 1,
+            elementCounter: 1,
+            assetCounter: 1,
+            documentModel: null,
+            settingsModel: null,
+            manifestModel: null,
+            isRendering: false,
+            clipboardImage: null,
+            thumbnailRefreshPending: false,
+            lastSaveHandle: null,
+            lastPackageFileName: '',
+            documentCreatedAt: '',
+            legacySource: null,
+            documentTitle: 'Presentation',
+            isSpacePressed: false,
+            activeIframePan: null,
+            textEditingElement: null,
+            textDefaults: {
+                fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif",
+                fontSize: 32,
+                fontColor: '#111111',
+                fontBold: false
+            },
+            aspectRatio: '16:9',
+            displayMode: 'fit',
+            currentStageWidth: CONFIG.STAGE_WIDTH_16_9,
+            currentStageHeight: CONFIG.STAGE_HEIGHT_16_9
+        };
+
+        const textEncoder = new TextEncoder();
+        const textDecoder = new TextDecoder('utf-8');
+
+        const dom = {
+            indicator: document.getElementById('page-indicator'),
+            navPrev: document.getElementById('nav-prev'),
+            navNext: document.getElementById('nav-next'),
+            saveBtn: document.getElementById('save-btn'),
+            saveAsBtn: document.getElementById('save-as-btn'),
+            thumbnailStrip: document.getElementById('thumbnail-strip'),
+            packageInput: document.getElementById('package-input'),
+            stage: document.getElementById('slide-stage'),
+            ratioBtn: document.getElementById('ratio-btn'),
+            fitBtn: document.getElementById('fit-btn'),
+            invertBtn: document.getElementById('invert-btn'),
+            fsBtn: document.getElementById('fs-btn'),
+            addSlideBtn: document.getElementById('add-slide-btn'),
+            deleteSlideBtn: document.getElementById('delete-slide-btn'),
+            deleteElementBtn: document.getElementById('delete-element-btn'),
+            openPackageBtn: document.getElementById('open-package-btn'),
+            addTextBtn: document.getElementById('add-text-btn'),
+            fontBoldBtn: document.getElementById('font-bold-btn'),
+            fontFamilySelect: document.getElementById('font-family-select'),
+            fontSizeInput: document.getElementById('font-size-input'),
+            fontColorInput: document.getElementById('font-color-input')
+        };
+
+        function sanitizeFileName(name) {
+            const base = (name || '').split(/[\\/]/).pop();
+            return base.replace(/[<>:"|?*]/g, '_').trim();
+        }
+
+        function splitName(name) {
+            const clean = name || '';
+            const dot = clean.lastIndexOf('.');
+            if (dot <= 0) return { base: clean || 'file', ext: '' };
+            return { base: clean.slice(0, dot), ext: clean.slice(dot) };
+        }
+
+        function splitPath(path) {
+            const normalized = path || '';
+            const slash = normalized.lastIndexOf('/');
+            const dir = slash === -1 ? '' : normalized.slice(0, slash + 1);
+            const file = slash === -1 ? normalized : normalized.slice(slash + 1);
+            const { base, ext } = splitName(file);
+            return { dir, base, ext };
+        }
+
+        function parseDataUrl(value) {
+            if (!value || typeof value !== 'string') return null;
+            if (!value.startsWith('data:')) return null;
+            const commaIndex = value.indexOf(',');
+            if (commaIndex === -1) return null;
+            const meta = value.slice(5, commaIndex);
+            const data = value.slice(commaIndex + 1);
+            const parts = meta.split(';').filter(Boolean);
+            const mime = parts[0] || 'application/octet-stream';
+            const isBase64 = parts.includes('base64');
+            return { mime, isBase64, data };
+        }
+
+        function decodeBase64ToUint8Array(base64) {
+            const cleaned = (base64 || '').replace(/\s+/g, '');
+            const binary = atob(cleaned);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        function stripExtensionFromName(name, extension) {
+            const safeName = sanitizeFileName(name || '');
+            if (!safeName) return '';
+            if (extension) {
+                const suffix = `.${extension.toLowerCase()}`;
+                if (safeName.toLowerCase().endsWith(suffix)) {
+                    return safeName.slice(0, -suffix.length);
+                }
+            }
+            const { base } = splitName(safeName);
+            return base;
+        }
+
+        function sanitizePath(path) {
+            const normalized = (path || '').replace(/\\/g, '/');
+            const parts = normalized.split('/').filter(Boolean);
+            const safeParts = parts
+                .filter(part => part !== '.' && part !== '..')
+                .map(part => part.replace(/[<>:"|?*]/g, '_'));
+            return safeParts.join('/');
+        }
+
+        function ensurePackageExtension(name) {
+            const safeName = sanitizeFileName(name || '');
+            if (!safeName) return '';
+            const lower = safeName.toLowerCase();
+            const ext = `.${CONFIG.PACKAGE_EXTENSION}`;
+            if (lower.endsWith(ext)) return safeName;
+            const { base } = splitName(safeName);
+            return `${base}${ext}`;
+        }
+
+        function guessMimeType(name) {
+            const lower = (name || '').toLowerCase();
+            if (lower.endsWith('.png')) return 'image/png';
+            if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+            if (lower.endsWith('.gif')) return 'image/gif';
+            if (lower.endsWith('.webp')) return 'image/webp';
+            if (lower.endsWith('.svg')) return 'image/svg+xml';
+            if (lower.endsWith('.bmp')) return 'image/bmp';
+            if (lower.endsWith('.ico')) return 'image/x-icon';
+            if (lower.endsWith('.mp4')) return 'video/mp4';
+            if (lower.endsWith('.webm')) return 'video/webm';
+            if (lower.endsWith('.ogg') || lower.endsWith('.ogv')) return 'video/ogg';
+            if (lower.endsWith('.mov') || lower.endsWith('.m4v')) return 'video/quicktime';
+            if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html';
+            if (lower.endsWith('.css')) return 'text/css';
+            if (lower.endsWith('.js')) return 'text/javascript';
+            if (lower.endsWith('.json')) return 'application/json';
+            return 'application/octet-stream';
+        }
+
+        function inferImageExtension(name, type) {
+            const extFromName = splitName(sanitizeFileName(name)).ext.toLowerCase();
+            if (extFromName) return extFromName.replace('.', '');
+            const typeMap = {
+                'image/png': 'png',
+                'image/jpeg': 'jpg',
+                'image/jpg': 'jpg',
+                'image/gif': 'gif',
+                'image/webp': 'webp',
+                'image/svg+xml': 'svg',
+                'image/bmp': 'bmp',
+                'image/x-icon': 'ico'
+            };
+            return typeMap[type] || 'png';
+        }
+
+        function inferVideoExtension(name, type) {
+            const extFromName = splitName(sanitizeFileName(name)).ext.toLowerCase();
+            if (extFromName) return extFromName.replace('.', '');
+            const typeMap = {
+                'video/mp4': 'mp4',
+                'video/webm': 'webm',
+                'video/ogg': 'ogv',
+                'video/quicktime': 'mov'
+            };
+            return typeMap[type] || 'mp4';
+        }
+
+        function normalizeAssetPath(value) {
+            if (!value) return null;
+            const trimmed = value.trim();
+            if (!trimmed) return null;
+            const cleaned = trimmed.split('#')[0].split('?')[0];
+            if (!cleaned) return null;
+            if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(cleaned)) return null;
+            const withoutLeading = cleaned.replace(/^\.\//, '').replace(/^\//, '');
+            if (withoutLeading.startsWith('..')) return null;
+            const safePath = sanitizePath(withoutLeading);
+            return safePath || null;
+        }
+
+        function extractSrcsetPaths(srcsetValue, assets) {
+            if (!srcsetValue) return;
+            const candidates = srcsetValue.split(',');
+            for (const candidate of candidates) {
+                const url = candidate.trim().split(/\s+/)[0];
+                const normalized = normalizeAssetPath(url);
+                if (normalized) assets.add(normalized);
+            }
+        }
+
+        function parseUrlCandidate(text) {
+            if (!text) return null;
+            const lines = String(text)
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean);
+            if (!lines.length) return null;
+            const candidate = lines.find(line => !line.startsWith('#')) || lines[0];
+            try {
+                return new URL(candidate).toString();
+            } catch {
+                return null;
+            }
+        }
+
+        function isVideoUrl(url) {
+            if (!url) return false;
+            const lower = url.toLowerCase().split('#')[0].split('?')[0];
+            return /\.(mp4|webm|ogg|ogv|mov|m4v)$/.test(lower);
+        }
+
+        function parseYouTubeStartTime(value) {
+            if (!value) return 0;
+            const trimmed = String(value).trim().toLowerCase();
+            if (!trimmed) return 0;
+            if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10) || 0;
+            let total = 0;
+            const pattern = /(\d+)(h|m|s)/g;
+            let match;
+            while ((match = pattern.exec(trimmed)) !== null) {
+                const amount = Number.parseInt(match[1], 10);
+                if (!Number.isFinite(amount)) continue;
+                if (match[2] === 'h') total += amount * 3600;
+                if (match[2] === 'm') total += amount * 60;
+                if (match[2] === 's') total += amount;
+            }
+            return total;
+        }
+
+        function extractYouTubeVideoId(url) {
+            if (!url) return null;
+            try {
+                const parsed = new URL(url);
+                const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+                let videoId = '';
+
+                if (host === 'youtu.be') {
+                    videoId = parsed.pathname.split('/')[1] || '';
+                } else if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+                    if (parsed.pathname === '/watch') {
+                        videoId = parsed.searchParams.get('v') || '';
+                    } else if (parsed.pathname.startsWith('/shorts/')) {
+                        videoId = parsed.pathname.split('/')[2] || '';
+                    } else if (parsed.pathname.startsWith('/embed/')) {
+                        videoId = parsed.pathname.split('/')[2] || '';
+                    }
+                }
+
+                if (!videoId) return null;
+                videoId = videoId.split('?')[0].split('&')[0];
+                if (!/^[a-zA-Z0-9_-]{6,}$/.test(videoId)) return null;
+
+                const startParam = parsed.searchParams.get('t')
+                    || parsed.searchParams.get('start')
+                    || parsed.searchParams.get('time_continue');
+                const startSeconds = parseYouTubeStartTime(startParam);
+
+                return { videoId, startSeconds };
+            } catch {
+                return null;
+            }
+        }
+
+        function getYouTubeEmbedUrl(url) {
+            const data = extractYouTubeVideoId(url);
+            if (!data) return null;
+            const params = new URLSearchParams({
+                rel: '0',
+                modestbranding: '1',
+                playsinline: '1'
+            });
+            if (data.startSeconds > 0) {
+                params.set('start', String(data.startSeconds));
+            }
+            return `https://www.youtube-nocookie.com/embed/${data.videoId}?${params.toString()}`;
+        }
+
+        function getUrlHostLabel(url) {
+            if (!url) return 'External';
+            try {
+                const parsed = new URL(url);
+                return parsed.hostname || 'External';
+            } catch {
+                return 'External';
+            }
+        }
+
+        function resetIdCounters() {
+            state.documentCounter = 1;
+            state.slideCounter = 1;
+            state.elementCounter = 1;
+            state.assetCounter = 1;
+        }
+
+        function generateId(prefix, counterKey) {
+            const current = Number.isFinite(state[counterKey]) ? state[counterKey] : 1;
+            state[counterKey] = current + 1;
+            return `${prefix}_${String(current).padStart(3, '0')}`;
+        }
+
+        function ensureDocumentId() {
+            if (!state.documentId) {
+                state.documentId = generateId('doc', 'documentCounter');
+            }
+            return state.documentId;
+        }
+
+        function ensureSlideId(slide) {
+            if (!slide) return '';
+            if (!slide.dataset.slideId) {
+                slide.dataset.slideId = generateId('slide', 'slideCounter');
+            }
+            return slide.dataset.slideId;
+        }
+
+        function ensureElementId(wrapper) {
+            if (!wrapper) return '';
+            if (!wrapper.dataset.elementId) {
+                wrapper.dataset.elementId = generateId('el', 'elementCounter');
+            }
+            return wrapper.dataset.elementId;
+        }
+
+        function generateAssetId() {
+            return generateId('asset', 'assetCounter');
+        }
+
+        function isPlainObject(value) {
+            return value && typeof value === 'object' && !Array.isArray(value);
+        }
+
+        function isFiniteNumber(value) {
+            return Number.isFinite(value);
+        }
+
+        function validateManifest(manifest) {
+            const errors = [];
+            if (!isPlainObject(manifest)) {
+                errors.push('manifest.notObject');
+                return errors;
+            }
+            if (manifest.format !== 'altppt') errors.push('manifest.format');
+            if (manifest.version !== '2.0') errors.push('manifest.version');
+            if (!isPlainObject(manifest.entry)) errors.push('manifest.entry');
+            if (!manifest.entry || !manifest.entry.content) errors.push('manifest.entry.content');
+            if (!manifest.entry || !manifest.entry.settings) errors.push('manifest.entry.settings');
+            if (manifest.assets && !Array.isArray(manifest.assets)) errors.push('manifest.assets');
+            if (Array.isArray(manifest.assets)) {
+                const ids = new Set();
+                manifest.assets.forEach((asset, index) => {
+                    if (!isPlainObject(asset)) {
+                        errors.push(`manifest.assets.${index}.notObject`);
+                        return;
+                    }
+                    if (!asset.id) errors.push(`manifest.assets.${index}.id`);
+                    if (!asset.path) errors.push(`manifest.assets.${index}.path`);
+                    if (asset.id) {
+                        if (ids.has(asset.id)) errors.push(`manifest.assets.${index}.id.duplicate`);
+                        ids.add(asset.id);
+                    }
+                });
+            }
+            return errors;
+        }
+
+        function validateContent(content) {
+            const errors = [];
+            if (!isPlainObject(content)) {
+                errors.push('content.notObject');
+                return errors;
+            }
+            if (!content.documentId) errors.push('content.documentId');
+            if (!Array.isArray(content.slides)) errors.push('content.slides');
+            (content.slides || []).forEach((slide, index) => {
+                if (!isPlainObject(slide)) {
+                    errors.push(`content.slides.${index}.notObject`);
+                    return;
+                }
+                if (!slide.id) errors.push(`content.slides.${index}.id`);
+                if (!Array.isArray(slide.elements)) errors.push(`content.slides.${index}.elements`);
+                (slide.elements || []).forEach((el, elIndex) => {
+                    if (!isPlainObject(el)) {
+                        errors.push(`content.slides.${index}.elements.${elIndex}.notObject`);
+                        return;
+                    }
+                    if (!el.id) errors.push(`content.slides.${index}.elements.${elIndex}.id`);
+                    if (!el.type) errors.push(`content.slides.${index}.elements.${elIndex}.type`);
+                    ['x', 'y', 'width', 'height'].forEach((key) => {
+                        if (el[key] !== undefined && !isFiniteNumber(el[key])) {
+                            errors.push(`content.slides.${index}.elements.${elIndex}.${key}`);
+                        }
+                    });
+                });
+            });
+            return errors;
+        }
+
+        function validateSettings(settings) {
+            const errors = [];
+            if (!isPlainObject(settings)) {
+                errors.push('settings.notObject');
+                return errors;
+            }
+            if (!isPlainObject(settings.document)) errors.push('settings.document');
+            if (settings.document) {
+                const ratio = settings.document.aspectRatio;
+                if (ratio && ratio !== '16:9' && ratio !== '4:3') {
+                    errors.push('settings.document.aspectRatio');
+                }
+                if (settings.document.stage) {
+                    if (!isFiniteNumber(settings.document.stage.width)) errors.push('settings.document.stage.width');
+                    if (!isFiniteNumber(settings.document.stage.height)) errors.push('settings.document.stage.height');
+                }
+            }
+            if (settings.defaults && settings.defaults.text) {
+                const text = settings.defaults.text;
+                if (text.fontSize !== undefined && !isFiniteNumber(text.fontSize)) errors.push('settings.defaults.text.fontSize');
+            }
+            return errors;
+        }
+
+        function isPlainObjectValue(value) {
+            return value && typeof value === 'object' && !Array.isArray(value);
+        }
+
+        function cloneJson(value) {
+            if (value === undefined || value === null) return value;
+            try {
+                return JSON.parse(JSON.stringify(value));
+            } catch (err) {
+                return value;
+            }
+        }
+
+        function normalizeContentModel(content) {
+            const model = isPlainObjectValue(content) ? content : {};
+            if (!model.documentId) model.documentId = ensureDocumentId();
+            if (!Array.isArray(model.slides)) model.slides = [];
+            model.slides = model.slides.map((slide) => {
+                const slideModel = isPlainObjectValue(slide) ? slide : {};
+                if (!slideModel.id) slideModel.id = generateId('slide', 'slideCounter');
+                if (!Array.isArray(slideModel.elements)) slideModel.elements = [];
+                slideModel.elements = slideModel.elements
+                    .map((el) => {
+                        const elementModel = isPlainObjectValue(el) ? el : null;
+                        if (!elementModel) return null;
+                        if (!elementModel.id) elementModel.id = generateId('el', 'elementCounter');
+                        return elementModel;
+                    })
+                    .filter(Boolean);
+                return slideModel;
+            });
+            return model;
+        }
+
+        function normalizeSettingsModel(settings) {
+            const model = isPlainObjectValue(settings) ? settings : {};
+            if (!isPlainObjectValue(model.document)) model.document = {};
+            if (!isPlainObjectValue(model.document.stage)) model.document.stage = {};
+            if (!isPlainObjectValue(model.defaults)) model.defaults = {};
+            if (!isPlainObjectValue(model.defaults.text)) model.defaults.text = {};
+
+            if (!model.document.title) {
+                model.document.title = state.documentTitle || 'Presentation';
+            }
+            if (!model.document.aspectRatio) {
+                model.document.aspectRatio = state.aspectRatio;
+            }
+            if (!Number.isFinite(model.document.stage.width)) {
+                model.document.stage.width = state.currentStageWidth;
+            }
+            if (!Number.isFinite(model.document.stage.height)) {
+                model.document.stage.height = state.currentStageHeight;
+            }
+
+            const defaults = model.defaults.text;
+            if (!defaults.fontFamily) defaults.fontFamily = state.textDefaults.fontFamily;
+            if (!Number.isFinite(defaults.fontSize)) defaults.fontSize = state.textDefaults.fontSize;
+            if (!defaults.fontColor) defaults.fontColor = state.textDefaults.fontColor;
+            if (!Number.isFinite(defaults.fontWeight)) {
+                defaults.fontWeight = state.textDefaults.fontBold ? 700 : 400;
+            }
+
+            return model;
+        }
+
+        function setModelsFromLoad(content, settings, manifest) {
+            state.documentModel = normalizeContentModel(cloneJson(content) || {});
+            state.settingsModel = normalizeSettingsModel(cloneJson(settings) || {});
+            state.manifestModel = manifest ? cloneJson(manifest) : null;
+        }
+
+        function ensureModelsReady() {
+            if (!state.documentModel) {
+                state.documentModel = normalizeContentModel({});
+            }
+            if (!state.settingsModel) {
+                state.settingsModel = normalizeSettingsModel({});
+            }
+            return { content: state.documentModel, settings: state.settingsModel };
+        }
+
+        function syncSettingsModelFromState() {
+            const settings = normalizeSettingsModel(state.settingsModel || {});
+            settings.document.title = state.documentTitle || settings.document.title || 'Presentation';
+            settings.document.aspectRatio = state.aspectRatio;
+            settings.document.stage.width = state.currentStageWidth;
+            settings.document.stage.height = state.currentStageHeight;
+
+            const defaults = settings.defaults.text;
+            defaults.fontFamily = state.textDefaults.fontFamily || defaults.fontFamily;
+            defaults.fontSize = Number.isFinite(state.textDefaults.fontSize) ? state.textDefaults.fontSize : defaults.fontSize;
+            defaults.fontColor = state.textDefaults.fontColor || defaults.fontColor;
+            defaults.fontWeight = state.textDefaults.fontBold ? 700 : 400;
+
+            state.settingsModel = settings;
+            return settings;
+        }
+
+        function getSlideModelIndex(slideId) {
+            if (!state.documentModel || !slideId) return -1;
+            return state.documentModel.slides.findIndex((slide) => slide && slide.id === slideId);
+        }
+
+        function ensureSlideModel(slideId, index) {
+            ensureModelsReady();
+            if (!slideId) {
+                slideId = generateId('slide', 'slideCounter');
+            }
+            const existingIndex = getSlideModelIndex(slideId);
+            if (existingIndex >= 0) {
+                return state.documentModel.slides[existingIndex];
+            }
+            const slideModel = { id: slideId, elements: [] };
+            const slides = state.documentModel.slides;
+            if (Number.isFinite(index) && index >= 0 && index <= slides.length) {
+                slides.splice(index, 0, slideModel);
+            } else {
+                slides.push(slideModel);
+            }
+            return slideModel;
+        }
+
+        function replaceSlideElementsModel(slideId, elements) {
+            const slideModel = ensureSlideModel(slideId);
+            slideModel.elements = Array.isArray(elements) ? elements : [];
+        }
+
+        function removeSlideModel(slideId) {
+            if (!state.documentModel || !slideId) return;
+            state.documentModel.slides = state.documentModel.slides.filter((slide) => slide && slide.id !== slideId);
+        }
+
+        function upsertElementModel(slideId, element) {
+            if (!element) return;
+            const slideModel = ensureSlideModel(slideId);
+            const elementId = element.id || generateId('el', 'elementCounter');
+            element.id = elementId;
+            const index = slideModel.elements.findIndex((el) => el && el.id === elementId);
+            if (index >= 0) {
+                slideModel.elements[index] = element;
+            } else {
+                slideModel.elements.push(element);
+            }
+        }
+
+        function removeElementModel(slideId, elementId) {
+            if (!state.documentModel || !slideId || !elementId) return;
+            const slideIndex = getSlideModelIndex(slideId);
+            if (slideIndex < 0) return;
+            const slideModel = state.documentModel.slides[slideIndex];
+            slideModel.elements = slideModel.elements.filter((el) => el && el.id !== elementId);
+        }
+
+        function buildManifest(assets) {
+            const now = new Date().toISOString();
+            if (!state.documentCreatedAt) state.documentCreatedAt = now;
+            return {
+                format: 'altppt',
+                version: '2.0',
+                createdAt: state.documentCreatedAt,
+                updatedAt: now,
+                entry: {
+                    content: 'content.json',
+                    settings: 'settings.json'
+                },
+                assets,
+                legacy: state.legacySource || undefined
+            };
+        }
+
+        function uniquePath(path) {
+            const safePath = sanitizePath(path);
+            const fallback = `file_${String(state.fileCounter++).padStart(3, '0')}`;
+            const { dir, base, ext } = splitPath(safePath || fallback);
+            let candidate = `${dir}${base}${ext}`;
+            let index = 1;
+            while (state.packageFiles.has(candidate)) {
+                candidate = `${dir}${base}-${index}${ext}`;
+                index += 1;
+            }
+            return candidate;
+        }
+
+        function extractRequiredAssetsFromHtml(htmlText) {
+            const assets = new Set();
+            const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+
+            doc.querySelectorAll('[src]').forEach((el) => {
+                const normalized = normalizeAssetPath(el.getAttribute('src'));
+                if (normalized) assets.add(normalized);
+                if (el.hasAttribute('srcset')) {
+                    extractSrcsetPaths(el.getAttribute('srcset'), assets);
+                }
+            });
+
+            doc.querySelectorAll('link[href]').forEach((el) => {
+                const normalized = normalizeAssetPath(el.getAttribute('href'));
+                if (normalized) assets.add(normalized);
+            });
+
+            doc.querySelectorAll('source[srcset]').forEach((el) => {
+                extractSrcsetPaths(el.getAttribute('srcset'), assets);
+            });
+
+            return assets;
+        }
+
+        function registerRequiredAssetsFromHtml(htmlText) {
+            extractRequiredAssetsFromHtml(htmlText).forEach(asset => state.requiredAssets.add(asset));
+        }
+
+        function matchRequiredAssetPath(fileName) {
+            if (!fileName) return null;
+            const matches = [];
+            state.requiredAssets.forEach((asset) => {
+                if (asset.split('/').pop() === fileName && !state.packageFiles.has(asset)) matches.push(asset);
+            });
+            return matches.length === 1 ? matches[0] : null;
+        }
+
+        function resetAssetRegistry() {
+            state.assetIndex.clear();
+            state.assetPathToId.clear();
+            clearAssetObjectUrls();
+        }
+
+        function ensureAssetRecordForPath(assetPath, blob, originalName) {
+            if (!assetPath) return '';
+            const existingId = state.assetPathToId.get(assetPath);
+            if (existingId) {
+                const record = state.assetIndex.get(existingId);
+                if (record) {
+                    const mime = blob && blob.type ? blob.type : record.mime || guessMimeType(assetPath);
+                    const bytes = blob ? blob.size : record.bytes || 0;
+                    state.assetIndex.set(existingId, {
+                        ...record,
+                        path: assetPath,
+                        mime,
+                        bytes,
+                        originalName: originalName || record.originalName || assetPath.split('/').pop() || assetPath
+                    });
+                }
+                return existingId;
+            }
+
+            const assetId = generateAssetId();
+            const mime = blob && blob.type ? blob.type : guessMimeType(assetPath);
+            const bytes = blob ? blob.size : 0;
+            const record = {
+                id: assetId,
+                path: assetPath,
+                mime,
+                bytes,
+                originalName: originalName || assetPath.split('/').pop() || assetPath
+            };
+            state.assetIndex.set(assetId, record);
+            state.assetPathToId.set(assetPath, assetId);
+            return assetId;
+        }
+
+        function getAssetIdByPath(assetPath) {
+            return assetPath ? state.assetPathToId.get(assetPath) || '' : '';
+        }
+
+        function getAssetPathById(assetId) {
+            if (!assetId) return '';
+            const record = state.assetIndex.get(assetId);
+            return record ? record.path : '';
+        }
+
+        function buildAssetIdMapping() {
+            const assetIdByPath = new Map();
+            const assets = [];
+            const paths = Array.from(state.packageFiles.keys()).sort();
+            paths.forEach((path) => {
+                const blob = state.packageFiles.get(path);
+                const assetId = ensureAssetRecordForPath(path, blob, path.split('/').pop());
+                if (assetId) {
+                    assetIdByPath.set(path, assetId);
+                    const record = state.assetIndex.get(assetId);
+                    if (record) assets.push({ ...record });
+                }
+            });
+            return { assetIdByPath, assets };
+        }
+
+        function getAssetUrlByPath(assetPath) {
+            if (!assetPath) return '';
+            const cached = state.assetObjectUrls.get(assetPath);
+            if (cached) return cached;
+            const blob = state.packageFiles.get(assetPath);
+            if (!blob) return '';
+            const url = URL.createObjectURL(blob);
+            state.assetObjectUrls.set(assetPath, url);
+            return url;
+        }
+
+        function clearAssetObjectUrls() {
+            state.assetObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+            state.assetObjectUrls.clear();
+        }
+
+        function registerImageAsset(blob, preferredName) {
+            const extension = inferImageExtension(preferredName, blob.type || '');
+            let baseName = sanitizeFileName(preferredName || '');
+            if (!baseName) {
+                baseName = `image_${String(state.imageCounter++).padStart(3, '0')}.${extension}`;
+            } else if (!baseName.includes('.')) {
+                baseName = `${baseName}.${extension}`;
+            }
+            const assetPath = uniquePath(`${CONFIG.IMAGE_DIR}/${baseName}`);
+            state.packageFiles.set(assetPath, blob);
+            ensureAssetRecordForPath(assetPath, blob, preferredName || baseName);
+            return assetPath;
+        }
+
+        function registerVideoAsset(blob, preferredName) {
+            const extension = inferVideoExtension(preferredName, blob.type || '');
+            let baseName = sanitizeFileName(preferredName || '');
+            if (!baseName) {
+                baseName = `video_${String(state.videoCounter++).padStart(3, '0')}.${extension}`;
+            } else if (!baseName.includes('.')) {
+                baseName = `${baseName}.${extension}`;
+            }
+            const assetPath = uniquePath(`${CONFIG.IMAGE_DIR}/${baseName}`);
+            state.packageFiles.set(assetPath, blob);
+            ensureAssetRecordForPath(assetPath, blob, preferredName || baseName);
+            return assetPath;
+        }
+
+        function registerSupportFile(file) {
+            const fileName = sanitizeFileName(file.name || '');
+            const relativePath = sanitizePath(file.webkitRelativePath || '');
+            const matchedPath = relativePath ? null : matchRequiredAssetPath(fileName);
+            const rawPath = matchedPath || relativePath || fileName;
+            const unique = uniquePath(rawPath || `file_${String(state.fileCounter++).padStart(3, '0')}`);
+            state.packageFiles.set(unique, file);
+            ensureAssetRecordForPath(unique, file, fileName || unique);
+            return unique;
+        }
+
+        function getMissingAssets() {
+            const missing = new Set();
+            state.requiredAssets.forEach((asset) => {
+                if (!state.packageFiles.has(asset)) missing.add(asset);
+            });
+            if (state.documentModel) {
+                state.documentModel.slides.forEach((slide) => {
+                    (slide.elements || []).forEach((element) => {
+                        if (!element || !element.source || element.source.kind !== 'asset') return;
+                        const assetPath = getAssetPathById(element.source.assetId);
+                        if (assetPath && !state.packageFiles.has(assetPath)) {
+                            missing.add(assetPath);
+                        }
+                    });
+                });
+            }
+            return Array.from(missing);
+        }
+
+        function isAssetIdUsedInModel(assetId) {
+            if (!state.documentModel || !assetId) return false;
+            return state.documentModel.slides.some((slide) => {
+                return (slide.elements || []).some((element) => {
+                    if (!element || !element.source || element.source.kind !== 'asset') return false;
+                    return element.source.assetId === assetId;
+                });
+            });
+        }
+
+        function isAssetPathUsedInModel(assetPath) {
+            const assetId = getAssetIdByPath(assetPath);
+            return isAssetIdUsedInModel(assetId);
+        }
+
+        function removeImageAssetIfUnused(assetPath) {
+            if (!assetPath) return;
+            const stillUsed = state.documentModel
+                ? isAssetPathUsedInModel(assetPath)
+                : Array.from(document.querySelectorAll('img[data-asset-path], video[data-asset-path]'))
+                    .some((media) => media.dataset.assetPath === assetPath);
+            const usedByClipboard = state.clipboardImage && state.clipboardImage.assetPath === assetPath;
+            if (!stillUsed && !usedByClipboard) {
+                state.packageFiles.delete(assetPath);
+                const assetId = state.assetPathToId.get(assetPath);
+                if (assetId) {
+                    state.assetIndex.delete(assetId);
+                    state.assetPathToId.delete(assetPath);
+                }
+                const cachedUrl = state.assetObjectUrls.get(assetPath);
+                if (cachedUrl) {
+                    URL.revokeObjectURL(cachedUrl);
+                    state.assetObjectUrls.delete(assetPath);
+                }
+            }
+        }
+
+        function removeHtmlAssetIfUnused(fileName) {
+            if (!fileName) return;
+            const stillUsed = state.documentModel
+                ? isAssetPathUsedInModel(fileName)
+                : Array.from(document.querySelectorAll('iframe'))
+                    .some((iframe) => iframe.dataset.filename === fileName);
+            if (!stillUsed) {
+                state.packageFiles.delete(fileName);
+                const assetId = state.assetPathToId.get(fileName);
+                if (assetId) {
+                    state.assetIndex.delete(assetId);
+                    state.assetPathToId.delete(fileName);
+                }
+                const cachedUrl = state.assetObjectUrls.get(fileName);
+                if (cachedUrl) {
+                    URL.revokeObjectURL(cachedUrl);
+                    state.assetObjectUrls.delete(fileName);
+                }
+            }
+        }
+
+        function convertEmbeddedImagesInDocument(doc, cache) {
+            if (!doc) return 0;
+            let converted = 0;
+            const images = doc.querySelectorAll('img[src^="data:"]');
+
+            images.forEach((img) => {
+                const src = img.getAttribute('src');
+                const parsed = parseDataUrl(src);
+                if (!parsed || !parsed.isBase64 || !parsed.mime.startsWith('image/')) return;
+
+                if (cache && cache.has(src)) {
+                    img.setAttribute('src', './' + cache.get(src));
+                    converted += 1;
+                    return;
+                }
+
+                try {
+                    const bytes = decodeBase64ToUint8Array(parsed.data);
+                    const blob = new Blob([bytes], { type: parsed.mime });
+                    const assetPath = registerImageAsset(blob, '');
+                    if (cache) cache.set(src, assetPath);
+                    img.setAttribute('src', './' + assetPath);
+                    converted += 1;
+                } catch (err) { }
+            });
+
+            return converted;
+        }
+
+        function convertBase64ImagesInHtml(htmlText, cache) {
+            if (!htmlText) return { html: htmlText, converted: 0 };
+            const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+            const converted = convertEmbeddedImagesInDocument(doc, cache);
+            if (!converted) return { html: htmlText, converted: 0 };
+            return { html: doc.documentElement.outerHTML, converted };
+        }
+
+        function refreshSlides() {
+            if (dom.stage) {
+                state.slides = dom.stage.querySelectorAll('.slide');
+            } else {
+                state.slides = [];
+            }
+            return state.slides;
+        }
+
+        function getActiveSlide() {
+            const slides = refreshSlides();
+            return slides[state.currentSlideIndex] || null;
+        }
+
+        function removeGuideText(slide) {
+            if (!slide) return;
+            const guideText = slide.querySelector('.guide-text');
+            if (guideText) guideText.remove();
+        }
+
+        function getWrapperMetrics(wrapper) {
+            const rect = wrapper.getBoundingClientRect();
+            const baseW = wrapper.clientWidth || rect.width || 1;
+            const baseH = wrapper.clientHeight || rect.height || 1;
+            const scaleX = rect.width / baseW;
+            const scaleY = rect.height / baseH;
+            return { rect, baseW, baseH, scaleX, scaleY };
+        }
+
+        function getIframeViewState(wrapper) {
+            if (!wrapper) return { viewScale: 1, offsetX: 0, offsetY: 0 };
+            const mode = wrapper.dataset.iframeScaleMode;
+            const rawScale = Number.parseFloat(wrapper.dataset.iframeScale);
+            const rawOffsetX = Number.parseFloat(wrapper.dataset.iframeOffsetX);
+            const rawOffsetY = Number.parseFloat(wrapper.dataset.iframeOffsetY);
+
+            let viewScale = 1;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (mode === 'fov') {
+                if (Number.isFinite(rawScale) && rawScale > 0) viewScale = rawScale;
+                if (Number.isFinite(rawOffsetX)) offsetX = rawOffsetX;
+                if (Number.isFinite(rawOffsetY)) offsetY = rawOffsetY;
+                return { viewScale, offsetX, offsetY };
+            }
+
+            if (mode === 'viewport') {
+                if (Number.isFinite(rawScale) && rawScale > 0) viewScale = rawScale;
+                const zoom = viewScale > 0 ? 1 / viewScale : 1;
+                if (Number.isFinite(rawOffsetX)) offsetX = -rawOffsetX * zoom;
+                if (Number.isFinite(rawOffsetY)) offsetY = -rawOffsetY * zoom;
+                return { viewScale, offsetX, offsetY };
+            }
+
+            if (Number.isFinite(rawScale) && rawScale > 0) {
+                viewScale = 1 / rawScale;
+            }
+            if (Number.isFinite(rawOffsetX)) offsetX = rawOffsetX;
+            if (Number.isFinite(rawOffsetY)) offsetY = rawOffsetY;
+
+            return { viewScale, offsetX, offsetY };
+        }
+
+        function updateIframeScaleLabel(wrapper, viewScale) {
+            if (!wrapper) return;
+            const label = wrapper.querySelector('.iframe-scale-label');
+            if (!label) return;
+            const zoomPercent = Math.round((1 / viewScale) * 100);
+            label.textContent = `${zoomPercent}%`;
+        }
+
+        function setIframeInteractive(wrapper, isInteractive) {
+            if (!wrapper) return;
+            wrapper.classList.toggle('iframe-interactive', isInteractive);
+            if (isInteractive) {
+                state.isSpacePressed = false;
+                state.activeIframePan = null;
+                document.body.classList.remove('pan-mode');
+                document.body.classList.remove('is-panning');
+            }
+            const toggle = wrapper.querySelector('.iframe-play-toggle');
+            if (!toggle) return;
+            if (isInteractive) {
+                toggle.textContent = '편집';
+                toggle.title = '편집 모드';
+            } else {
+                toggle.textContent = '재생';
+                toggle.title = '재생 모드';
+            }
+        }
+
+        function toggleIframeInteractive(wrapper) {
+            if (!wrapper) return;
+            const isInteractive = wrapper.classList.contains('iframe-interactive');
+            setIframeInteractive(wrapper, !isInteractive);
+        }
+
+        function applyIframeView(wrapper, viewScale, offsetX, offsetY) {
+            if (!wrapper) return;
+            const iframe = wrapper.querySelector('iframe');
+            if (!iframe) return;
+            const metrics = getWrapperMetrics(wrapper);
+            const baseScale = Number.isFinite(viewScale) ? viewScale : 1;
+            const clampedScale = Math.min(Math.max(baseScale, CONFIG.IFRAME_SCALE_MIN), CONFIG.IFRAME_SCALE_MAX);
+            const zoom = 1 / clampedScale;
+            const scaledW = metrics.baseW * zoom;
+            const scaledH = metrics.baseH * zoom;
+            const minOffsetX = Math.min(0, metrics.baseW - scaledW);
+            const minOffsetY = Math.min(0, metrics.baseH - scaledH);
+            const clampedX = Math.min(0, Math.max(offsetX || 0, minOffsetX));
+            const clampedY = Math.min(0, Math.max(offsetY || 0, minOffsetY));
+
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.transform = `translate(${clampedX}px, ${clampedY}px) scale(${zoom})`;
+
+            wrapper.dataset.iframeScaleMode = 'fov';
+            wrapper.dataset.iframeScale = String(clampedScale);
+            wrapper.dataset.iframeOffsetX = String(clampedX);
+            wrapper.dataset.iframeOffsetY = String(clampedY);
+
+            updateIframeScaleLabel(wrapper, clampedScale);
+            syncElementModelFromWrapper(wrapper);
+        }
+
+        function zoomIframeView(wrapper, nextScale, anchor) {
+            if (!wrapper) return;
+            const current = getIframeViewState(wrapper);
+            const metrics = getWrapperMetrics(wrapper);
+            const anchorX = anchor && Number.isFinite(anchor.x) ? anchor.x : metrics.baseW / 2;
+            const anchorY = anchor && Number.isFinite(anchor.y) ? anchor.y : metrics.baseH / 2;
+            const currentZoom = current.viewScale > 0 ? 1 / current.viewScale : 1;
+            const nextZoom = nextScale > 0 ? 1 / nextScale : 1;
+            const contentX = (anchorX - current.offsetX) / currentZoom;
+            const contentY = (anchorY - current.offsetY) / currentZoom;
+            const nextOffsetX = anchorX - contentX * nextZoom;
+            const nextOffsetY = anchorY - contentY * nextZoom;
+            applyIframeView(wrapper, nextScale, nextOffsetX, nextOffsetY);
+            showSaveButton();
+        }
+
+        function ensureIframeControls(wrapper) {
+            if (!wrapper || !wrapper.classList.contains('draggable-iframe')) return;
+            if (!wrapper.querySelector('iframe')) return;
+            let controls = wrapper.querySelector('.iframe-controls');
+            if (!controls) {
+                controls = document.createElement('div');
+                controls.className = 'iframe-controls';
+
+                const playToggle = document.createElement('button');
+                playToggle.type = 'button';
+                playToggle.className = 'iframe-control-btn iframe-play-toggle';
+                playToggle.textContent = '재생';
+                playToggle.title = '재생 모드';
+
+                const zoomOut = document.createElement('button');
+                zoomOut.type = 'button';
+                zoomOut.className = 'iframe-control-btn';
+                zoomOut.textContent = '-';
+                zoomOut.title = '축소';
+
+                const zoomReset = document.createElement('button');
+                zoomReset.type = 'button';
+                zoomReset.className = 'iframe-control-btn';
+                zoomReset.textContent = '1:1';
+                zoomReset.title = '100%';
+
+                const zoomIn = document.createElement('button');
+                zoomIn.type = 'button';
+                zoomIn.className = 'iframe-control-btn';
+                zoomIn.textContent = '+';
+                zoomIn.title = '확대';
+
+                const label = document.createElement('span');
+                label.className = 'iframe-scale-label';
+                label.textContent = '100%';
+
+                controls.appendChild(playToggle);
+                controls.appendChild(zoomOut);
+                controls.appendChild(zoomReset);
+                controls.appendChild(zoomIn);
+                controls.appendChild(label);
+
+                controls.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                });
+                controls.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+
+                playToggle.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    toggleIframeInteractive(wrapper);
+                });
+
+                zoomOut.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const current = getIframeViewState(wrapper);
+                    zoomIframeView(wrapper, current.viewScale + CONFIG.IFRAME_SCALE_STEP);
+                });
+                zoomIn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const current = getIframeViewState(wrapper);
+                    zoomIframeView(wrapper, current.viewScale - CONFIG.IFRAME_SCALE_STEP);
+                });
+                zoomReset.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    applyIframeView(wrapper, 1, 0, 0);
+                });
+
+                wrapper.appendChild(controls);
+            }
+
+            const current = getIframeViewState(wrapper);
+            applyIframeView(wrapper, current.viewScale, current.offsetX, current.offsetY);
+            setIframeInteractive(wrapper, wrapper.classList.contains('iframe-interactive'));
+        }
+
+        function initializeIframeControls() {
+            document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                ensureIframeControls(wrapper);
+            });
+        }
+
+        function updateStageDimensions() {
+            if (state.aspectRatio === '16:9') {
+                state.currentStageWidth = CONFIG.STAGE_WIDTH_16_9;
+                state.currentStageHeight = CONFIG.STAGE_HEIGHT_16_9;
+            } else {
+                state.currentStageWidth = CONFIG.STAGE_WIDTH_4_3;
+                state.currentStageHeight = CONFIG.STAGE_HEIGHT_4_3;
+            }
+            if (dom.stage) {
+                dom.stage.style.width = `${state.currentStageWidth}px`;
+                dom.stage.style.height = `${state.currentStageHeight}px`;
+            }
+
+            if (dom.ratioBtn) {
+                dom.ratioBtn.textContent = `비율: ${state.aspectRatio}`;
+            }
+
+            renderThumbnails();
+            resizeStage();
+            syncSettingsModelFromState();
+        }
+
+        function toggleAspectRatio() {
+            state.aspectRatio = state.aspectRatio === '16:9' ? '4:3' : '16:9';
+            updateStageDimensions();
+        }
+
+        function toggleDisplayMode() {
+            state.displayMode = state.displayMode === 'fit' ? 'stretch' : 'fit';
+            if (dom.fitBtn) {
+                dom.fitBtn.textContent = state.displayMode === 'fit' ? '화면: 맞춤' : '화면: 채움';
+            }
+            resizeStage();
+        }
+
+        function updateInvertButton() {
+            if (!dom.invertBtn) return;
+            const isInverted = document.body.classList.contains('invert-mode');
+            dom.invertBtn.textContent = isInverted ? '색상: 색상반전' : '색상: 기본';
+        }
+
+        function toggleInvertMode() {
+            document.body.classList.toggle('invert-mode');
+            updateInvertButton();
+        }
+
+        function resizeStage() {
+            const stage = dom.stage;
+            if (!stage) return;
+
+            const isFullscreen = document.body.classList.contains('is-fullscreen');
+
+            let availableWidth = window.innerWidth;
+            let availableHeight = window.innerHeight;
+            let offsetY = 0;
+
+            if (!isFullscreen) {
+                availableWidth -= 40;
+                availableHeight -= 40;
+
+                if (dom.thumbnailStrip) {
+                    const reserve = dom.thumbnailStrip.offsetHeight + 30;
+                    availableHeight -= reserve;
+                    offsetY = -(reserve / 2);
+                }
+            }
+
+            const targetW = state.currentStageWidth;
+            const targetH = state.currentStageHeight;
+
+            const scaleX = availableWidth / targetW;
+            const scaleY = availableHeight / targetH;
+
+            let finalScaleX;
+            let finalScaleY;
+
+            if (state.displayMode === 'stretch') {
+                finalScaleX = scaleX;
+                finalScaleY = scaleY;
+                offsetY = 0;
+            } else {
+                const fitScale = Math.min(scaleX, scaleY);
+                finalScaleX = fitScale;
+                finalScaleY = fitScale;
+            }
+
+            if (finalScaleX < 0.1) finalScaleX = 0.1;
+            if (finalScaleY < 0.1) finalScaleY = 0.1;
+
+            stage.style.transform = `translate(-50%, calc(-50% + ${offsetY}px)) scale(${finalScaleX}, ${finalScaleY})`;
+            state.currentScaleX = finalScaleX;
+            state.currentScaleY = finalScaleY;
+        }
+
+        function applySettingsFromModel(settings) {
+            if (!settings || !settings.document) return;
+            const docSettings = settings.document;
+            if (docSettings.title) {
+                document.title = docSettings.title;
+                state.documentTitle = docSettings.title;
+            }
+            if (docSettings.aspectRatio === '16:9' || docSettings.aspectRatio === '4:3') {
+                state.aspectRatio = docSettings.aspectRatio;
+            }
+            updateStageDimensions();
+
+            const defaults = settings.defaults && settings.defaults.text ? settings.defaults.text : null;
+            if (defaults) {
+                state.textDefaults = {
+                    fontFamily: defaults.fontFamily || state.textDefaults.fontFamily,
+                    fontSize: Number.isFinite(defaults.fontSize) ? defaults.fontSize : state.textDefaults.fontSize,
+                    fontColor: defaults.fontColor || state.textDefaults.fontColor,
+                    fontBold: defaults.fontWeight ? Number(defaults.fontWeight) >= 600 : state.textDefaults.fontBold
+                };
+            }
+            syncTextControls(null);
+        }
+
+        function createElementWrapperFromModel(element, assetIdToPath) {
+            if (!element) return null;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img';
+            if (element.type === 'video') wrapper.classList.add('draggable-video');
+            if (element.type === 'html' || element.type === 'embed') wrapper.classList.add('draggable-iframe');
+            if (element.type === 'text') wrapper.classList.add('draggable-text');
+
+            if (element.id) wrapper.dataset.elementId = element.id;
+            wrapper.style.left = `${Number.isFinite(element.x) ? element.x : 0}px`;
+            wrapper.style.top = `${Number.isFinite(element.y) ? element.y : 0}px`;
+            wrapper.style.width = `${Number.isFinite(element.width) ? element.width : 320}px`;
+            wrapper.style.height = `${Number.isFinite(element.height) ? element.height : 180}px`;
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            if (element.type === 'image') {
+                const img = document.createElement('img');
+                let src = '';
+                if (element.source && element.source.kind === 'asset' && element.source.assetId) {
+                    const assetPath = assetIdToPath.get(element.source.assetId) || '';
+                    if (assetPath) {
+                        src = getAssetUrlByPath(assetPath);
+                        img.dataset.assetPath = assetPath;
+                    }
+                } else if (element.source && element.source.kind === 'url' && element.source.url) {
+                    src = element.source.url;
+                }
+                img.src = src;
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.display = 'block';
+                img.ondragstart = () => false;
+                wrapper.appendChild(img);
+            } else if (element.type === 'video') {
+                const video = document.createElement('video');
+                let src = '';
+                if (element.source && element.source.kind === 'asset' && element.source.assetId) {
+                    const assetPath = assetIdToPath.get(element.source.assetId) || '';
+                    if (assetPath) {
+                        src = getAssetUrlByPath(assetPath);
+                        video.dataset.assetPath = assetPath;
+                    }
+                } else if (element.source && element.source.kind === 'url' && element.source.url) {
+                    src = element.source.url;
+                }
+                video.src = src;
+                video.controls = element.controls !== false;
+                video.autoplay = element.autoplay === true;
+                video.muted = element.muted === true;
+                video.playsInline = true;
+                video.preload = 'metadata';
+                wrapper.appendChild(video);
+            } else if (element.type === 'html' || element.type === 'embed') {
+                const iframe = document.createElement('iframe');
+                let src = '';
+                if (element.type === 'html' && element.source && element.source.kind === 'asset' && element.source.assetId) {
+                    const assetPath = assetIdToPath.get(element.source.assetId) || '';
+                    if (assetPath) {
+                        src = getAssetUrlByPath(assetPath);
+                        iframe.dataset.filename = assetPath;
+                    }
+                } else if (element.type === 'embed' && element.embedUrl) {
+                    src = element.embedUrl;
+                }
+                iframe.src = src;
+                iframe.allowFullscreen = true;
+                iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+
+                if (element.type === 'embed') {
+                    wrapper.dataset.elementType = 'embed';
+                    wrapper.dataset.embedProvider = element.provider || '';
+                    wrapper.dataset.externalUrl = element.url || '';
+                    wrapper.dataset.embedUrl = element.embedUrl || '';
+                }
+
+                wrapper.appendChild(iframe);
+                wrapper.appendChild(handle);
+
+                if (element.fov) {
+                    applyIframeView(wrapper, element.fov.scale || 1, element.fov.offsetX || 0, element.fov.offsetY || 0);
+                }
+
+                ensureIframeControls(wrapper);
+                setupInteraction(wrapper, handle);
+                return wrapper;
+            } else if (element.type === 'text') {
+                const textBox = document.createElement('div');
+                textBox.className = 'text-box';
+                textBox.dataset.placeholder = '텍스트 입력';
+                textBox.textContent = element.text || '';
+                textBox.setAttribute('contenteditable', 'false');
+                textBox.setAttribute('spellcheck', 'false');
+                if (element.style) {
+                    if (element.style.fontFamily) textBox.style.fontFamily = element.style.fontFamily;
+                    if (Number.isFinite(element.style.fontSize)) textBox.style.fontSize = `${element.style.fontSize}px`;
+                    if (element.style.fontColor) textBox.style.color = element.style.fontColor;
+                    if (element.style.fontWeight) textBox.style.fontWeight = String(element.style.fontWeight);
+                }
+                wrapper.appendChild(textBox);
+            }
+
+            wrapper.appendChild(handle);
+            setupInteraction(wrapper, handle);
+            if (wrapper.classList.contains('draggable-text')) {
+                initializeTextBox(wrapper);
+            }
+            return wrapper;
+        }
+
+        function renderDocumentFromModel(content, settings, manifest) {
+            state.isRendering = true;
+            setModelsFromLoad(content || {}, settings || {}, manifest || null);
+            try {
+                clearAssetObjectUrls();
+                if (dom.stage) dom.stage.innerHTML = '';
+                if (!content || !Array.isArray(content.slides)) return;
+
+                const assetIdToPath = new Map();
+                if (manifest && Array.isArray(manifest.assets)) {
+                    manifest.assets.forEach((asset) => {
+                        if (asset && asset.id && asset.path) {
+                            assetIdToPath.set(asset.id, asset.path);
+                        }
+                    });
+                }
+
+                applySettingsFromModel(settings);
+
+                content.slides.forEach((slide, index) => {
+                    const slideEl = document.createElement('div');
+                    slideEl.className = 'slide';
+                    if (index === 0) slideEl.classList.add('active');
+                    if (slide && slide.id) slideEl.dataset.slideId = slide.id;
+                    (slide.elements || []).forEach((element) => {
+                        const wrapper = createElementWrapperFromModel(element, assetIdToPath);
+                        if (wrapper) slideEl.appendChild(wrapper);
+                    });
+                    dom.stage.appendChild(slideEl);
+                });
+
+                state.currentSlideIndex = 0;
+                updateSlideVisibility();
+                renderThumbnails();
+                initializeIframeControls();
+                resizeStage();
+            } finally {
+                state.isRendering = false;
+            }
+        }
+
+        function parseFontSizeValue(value, fallback) {
+            const parsed = Number.parseFloat(value);
+            return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
+        }
+
+        function normalizeFontWeight(value, fallback) {
+            if (!value) return fallback;
+            const numeric = Number.parseInt(value, 10);
+            if (Number.isFinite(numeric)) return numeric;
+            const normalized = String(value).toLowerCase();
+            if (normalized === 'bold' || normalized === 'bolder') return 700;
+            if (normalized === 'normal') return 400;
+            return fallback;
+        }
+
+        function getTextDefaultsFromControls() {
+            const defaults = {
+                fontFamily: state.textDefaults.fontFamily,
+                fontSize: state.textDefaults.fontSize,
+                fontColor: state.textDefaults.fontColor,
+                fontWeight: state.textDefaults.fontBold ? 700 : 400
+            };
+
+            if (dom.fontFamilySelect && dom.fontFamilySelect.value) {
+                defaults.fontFamily = dom.fontFamilySelect.value;
+            }
+            if (dom.fontSizeInput) {
+                const min = Number.parseInt(dom.fontSizeInput.min, 10) || 8;
+                const max = Number.parseInt(dom.fontSizeInput.max, 10) || 200;
+                let size = parseFontSizeValue(dom.fontSizeInput.value, defaults.fontSize);
+                size = Math.min(Math.max(size, min), max);
+                defaults.fontSize = size;
+            }
+            if (dom.fontColorInput && dom.fontColorInput.value) {
+                defaults.fontColor = dom.fontColorInput.value;
+            }
+            if (dom.fontBoldBtn) {
+                defaults.fontWeight = dom.fontBoldBtn.classList.contains('is-active') ? 700 : 400;
+            }
+            return defaults;
+        }
+
+        function buildSettingsFromDom() {
+            const defaults = getTextDefaultsFromControls();
+            state.documentTitle = document.title || state.documentTitle;
+            return {
+                document: {
+                    title: state.documentTitle || 'Presentation',
+                    aspectRatio: state.aspectRatio,
+                    stage: {
+                        width: state.currentStageWidth,
+                        height: state.currentStageHeight
+                    }
+                },
+                defaults: {
+                    text: defaults
+                }
+            };
+        }
+
+        function readNumericStyle(element, prop, fallback) {
+            const value = Number.parseFloat(element.style[prop]);
+            if (Number.isFinite(value)) return value;
+            const computed = Number.parseFloat(getComputedStyle(element)[prop]);
+            return Number.isFinite(computed) ? computed : fallback;
+        }
+
+        function readFovFromWrapper(wrapper) {
+            if (!wrapper) return null;
+            const mode = wrapper.dataset.iframeScaleMode || 'fov';
+            const scale = Number.parseFloat(wrapper.dataset.iframeScale);
+            const offsetX = Number.parseFloat(wrapper.dataset.iframeOffsetX);
+            const offsetY = Number.parseFloat(wrapper.dataset.iframeOffsetY);
+            const hasData = Number.isFinite(scale) || Number.isFinite(offsetX) || Number.isFinite(offsetY);
+            if (!hasData) return null;
+            return {
+                mode,
+                scale: Number.isFinite(scale) ? scale : 1,
+                offsetX: Number.isFinite(offsetX) ? offsetX : 0,
+                offsetY: Number.isFinite(offsetY) ? offsetY : 0
+            };
+        }
+
+        function buildElementFromWrapper(wrapper, assetIdByPath) {
+            if (!wrapper) return null;
+            const elementId = ensureElementId(wrapper);
+            const x = readNumericStyle(wrapper, 'left', wrapper.offsetLeft);
+            const y = readNumericStyle(wrapper, 'top', wrapper.offsetTop);
+            const width = readNumericStyle(wrapper, 'width', wrapper.offsetWidth);
+            const height = readNumericStyle(wrapper, 'height', wrapper.offsetHeight);
+
+            const textBox = wrapper.querySelector('.text-box');
+            if (textBox || wrapper.classList.contains('draggable-text')) {
+                const computed = getComputedStyle(textBox || wrapper);
+                const style = {
+                    fontFamily: (textBox && textBox.style.fontFamily) || computed.fontFamily || state.textDefaults.fontFamily,
+                    fontSize: parseFontSizeValue((textBox && textBox.style.fontSize) || computed.fontSize, state.textDefaults.fontSize),
+                    fontColor: (textBox && textBox.style.color) || computed.color || state.textDefaults.fontColor,
+                    fontWeight: normalizeFontWeight((textBox && textBox.style.fontWeight) || computed.fontWeight, state.textDefaults.fontBold ? 700 : 400)
+                };
+                return {
+                    id: elementId,
+                    type: 'text',
+                    x,
+                    y,
+                    width,
+                    height,
+                    text: textBox ? textBox.textContent || '' : '',
+                    style
+                };
+            }
+
+            const img = wrapper.querySelector('img');
+            if (img) {
+                const assetPath = img.dataset.assetPath;
+                const src = img.getAttribute('src') || '';
+                if (assetPath) {
+                    let assetId = assetIdByPath.get(assetPath);
+                    if (!assetId) {
+                        assetId = ensureAssetRecordForPath(assetPath, state.packageFiles.get(assetPath), assetPath.split('/').pop());
+                        if (assetId) assetIdByPath.set(assetPath, assetId);
+                    }
+                    return {
+                        id: elementId,
+                        type: 'image',
+                        x,
+                        y,
+                        width,
+                        height,
+                        source: { kind: 'asset', assetId }
+                    };
+                }
+                return {
+                    id: elementId,
+                    type: 'image',
+                    x,
+                    y,
+                    width,
+                    height,
+                    source: { kind: 'url', url: src }
+                };
+            }
+
+            const video = wrapper.querySelector('video');
+            if (video) {
+                const assetPath = video.dataset.assetPath;
+                const src = video.getAttribute('src') || '';
+                if (assetPath) {
+                    let assetId = assetIdByPath.get(assetPath);
+                    if (!assetId) {
+                        assetId = ensureAssetRecordForPath(assetPath, state.packageFiles.get(assetPath), assetPath.split('/').pop());
+                        if (assetId) assetIdByPath.set(assetPath, assetId);
+                    }
+                    return {
+                        id: elementId,
+                        type: 'video',
+                        x,
+                        y,
+                        width,
+                        height,
+                        source: { kind: 'asset', assetId },
+                        controls: video.controls,
+                        autoplay: video.autoplay,
+                        muted: video.muted
+                    };
+                }
+                return {
+                    id: elementId,
+                    type: 'video',
+                    x,
+                    y,
+                    width,
+                    height,
+                    source: { kind: 'url', url: src },
+                    controls: video.controls,
+                    autoplay: video.autoplay,
+                    muted: video.muted
+                };
+            }
+
+            const iframe = wrapper.querySelector('iframe');
+            if (iframe) {
+                const embedType = wrapper.dataset.elementType;
+                const embedUrl = wrapper.dataset.embedUrl || iframe.getAttribute('src') || '';
+                const externalUrl = wrapper.dataset.externalUrl || '';
+                const provider = wrapper.dataset.embedProvider || '';
+                const localFilename = iframe.dataset.filename;
+                const isEmbed = embedType === 'embed' || (!localFilename && embedUrl && !normalizeAssetPath(embedUrl));
+                if (isEmbed) {
+                    return {
+                        id: elementId,
+                        type: 'embed',
+                        x,
+                        y,
+                        width,
+                        height,
+                        provider: provider || 'external',
+                        url: externalUrl || embedUrl,
+                        embedUrl,
+                        fov: readFovFromWrapper(wrapper) || undefined
+                    };
+                }
+
+                const assetPath = iframe.dataset.filename || normalizeAssetPath(iframe.getAttribute('src'));
+                if (!assetPath) return null;
+                let assetId = assetIdByPath.get(assetPath);
+                if (!assetId) {
+                    assetId = ensureAssetRecordForPath(assetPath, state.packageFiles.get(assetPath), assetPath.split('/').pop());
+                    if (assetId) assetIdByPath.set(assetPath, assetId);
+                }
+                return {
+                    id: elementId,
+                    type: 'html',
+                    x,
+                    y,
+                    width,
+                    height,
+                    source: { kind: 'asset', assetId },
+                    fov: readFovFromWrapper(wrapper) || { mode: 'fov', scale: 1, offsetX: 0, offsetY: 0 }
+                };
+            }
+
+            return null;
+        }
+
+        function buildContentFromDom(assetIdByPath) {
+            const slides = refreshSlides();
+            const contentSlides = [];
+            slides.forEach((slide) => {
+                const slideId = ensureSlideId(slide);
+                const elements = [];
+                slide.querySelectorAll('.draggable-img').forEach((wrapper) => {
+                    const element = buildElementFromWrapper(wrapper, assetIdByPath);
+                    if (element) elements.push(element);
+                });
+                contentSlides.push({ id: slideId, elements });
+            });
+            return {
+                documentId: ensureDocumentId(),
+                slides: contentSlides
+            };
+        }
+
+        function syncModelsFromDom() {
+            const { assetIdByPath } = buildAssetIdMapping();
+            const content = buildContentFromDom(assetIdByPath);
+            const settings = buildSettingsFromDom();
+            state.documentModel = normalizeContentModel(content);
+            state.settingsModel = normalizeSettingsModel(settings);
+            return { content: state.documentModel, settings: state.settingsModel };
+        }
+
+        function syncSlideModelFromDom(slide) {
+            if (!slide || state.isRendering) return;
+            ensureModelsReady();
+            const slideId = ensureSlideId(slide);
+            const elements = [];
+            slide.querySelectorAll('.draggable-img').forEach((wrapper) => {
+                const element = buildElementFromWrapper(wrapper, state.assetPathToId);
+                if (element) elements.push(element);
+            });
+            replaceSlideElementsModel(slideId, elements);
+        }
+
+        function syncElementModelFromWrapper(wrapper) {
+            if (!wrapper || state.isRendering) return;
+            const slide = wrapper.closest('.slide');
+            if (!slide) return;
+            ensureModelsReady();
+            const slideId = ensureSlideId(slide);
+            const element = buildElementFromWrapper(wrapper, state.assetPathToId);
+            if (!element) return;
+            upsertElementModel(slideId, element);
+        }
+
+        function triggerPackageLoad() {
+            if (!dom.packageInput) return;
+            dom.packageInput.value = '';
+            dom.packageInput.click();
+        }
+
+        function parseZipEntries(buffer) {
+            const data = new Uint8Array(buffer);
+            const view = new DataView(buffer);
+            let eocdOffset = -1;
+
+            for (let i = data.length - 22; i >= 0; i--) {
+                if (data[i] === 0x50 && data[i + 1] === 0x4b && data[i + 2] === 0x05 && data[i + 3] === 0x06) {
+                    eocdOffset = i;
+                    break;
+                }
+            }
+
+            if (eocdOffset < 0) throw new Error('패키지 끝을 찾을 수 없습니다.');
+
+            const centralDirSize = view.getUint32(eocdOffset + 12, true);
+            const centralDirOffset = view.getUint32(eocdOffset + 16, true);
+            const centralDirEnd = centralDirOffset + centralDirSize;
+            let offset = centralDirOffset;
+            const entries = [];
+
+            while (offset < centralDirEnd) {
+                if (view.getUint32(offset, true) !== 0x02014b50) break;
+                const compression = view.getUint16(offset + 10, true);
+                const nameLen = view.getUint16(offset + 28, true);
+                const extraLen = view.getUint16(offset + 30, true);
+                const commentLen = view.getUint16(offset + 32, true);
+                const localHeaderOffset = view.getUint32(offset + 42, true);
+                const nameBytes = data.slice(offset + 46, offset + 46 + nameLen);
+                const name = textDecoder.decode(nameBytes);
+                entries.push({ name, compression, localHeaderOffset });
+                offset += 46 + nameLen + extraLen + commentLen;
+            }
+
+            const files = new Map();
+            for (const entry of entries) {
+                if (!entry.name || entry.name.endsWith('/')) continue;
+                if (entry.compression !== 0) {
+                    throw new Error('압축된 ZIP은 지원하지 않습니다.');
+                }
+
+                const localOffset = entry.localHeaderOffset;
+                if (view.getUint32(localOffset, true) !== 0x04034b50) continue;
+                const nameLen = view.getUint16(localOffset + 26, true);
+                const extraLen = view.getUint16(localOffset + 28, true);
+                const dataOffset = localOffset + 30 + nameLen + extraLen;
+                const dataSize = view.getUint32(localOffset + 18, true);
+                const fileData = data.slice(dataOffset, dataOffset + dataSize);
+                files.set(entry.name, fileData);
+            }
+
+            return files;
+        }
+
+        function findMainHtml(files) {
+            const htmlEntries = [];
+            for (const [name, data] of files.entries()) {
+                if (name.toLowerCase().endsWith('.html') || name.toLowerCase().endsWith('.htm')) {
+                    htmlEntries.push({ name, data });
+                }
+            }
+
+            for (const entry of htmlEntries) {
+                const text = textDecoder.decode(entry.data);
+                const doc = new DOMParser().parseFromString(text, 'text/html');
+                if (doc.querySelector('#slide-stage') && doc.querySelector('.slide')) {
+                    return { name: entry.name, html: text };
+                }
+            }
+
+            if (htmlEntries.length > 0) {
+                const fallback = htmlEntries[0];
+                return { name: fallback.name, html: textDecoder.decode(fallback.data) };
+            }
+            return null;
+        }
+
+        function parseJsonEntry(files, name) {
+            if (!files.has(name)) return null;
+            try {
+                const text = textDecoder.decode(files.get(name));
+                return JSON.parse(text);
+            } catch (err) {
+                return null;
+            }
+        }
+
+        function syncIdCountersFromContent(content, manifest) {
+            resetIdCounters();
+            if (content && content.documentId) {
+                state.documentId = content.documentId;
+                const match = content.documentId.match(/^doc_(\d+)$/);
+                if (match) {
+                    state.documentCounter = Math.max(state.documentCounter, Number.parseInt(match[1], 10) + 1);
+                }
+            }
+            if (content && Array.isArray(content.slides)) {
+                content.slides.forEach((slide) => {
+                    if (slide && slide.id) {
+                        const match = String(slide.id).match(/^slide_(\d+)$/);
+                        if (match) {
+                            state.slideCounter = Math.max(state.slideCounter, Number.parseInt(match[1], 10) + 1);
+                        }
+                    }
+                    (slide.elements || []).forEach((el) => {
+                        if (el && el.id) {
+                            const match = String(el.id).match(/^el_(\d+)$/);
+                            if (match) {
+                                state.elementCounter = Math.max(state.elementCounter, Number.parseInt(match[1], 10) + 1);
+                            }
+                        }
+                    });
+                });
+            }
+            if (manifest && Array.isArray(manifest.assets)) {
+                manifest.assets.forEach((asset) => {
+                    if (asset && asset.id) {
+                        const match = String(asset.id).match(/^asset_(\d+)$/);
+                        if (match) {
+                            state.assetCounter = Math.max(state.assetCounter, Number.parseInt(match[1], 10) + 1);
+                        }
+                    }
+                });
+            }
+        }
+
+        async function loadV2Package(files, file) {
+            const manifest = parseJsonEntry(files, 'manifest.json');
+            const manifestErrors = validateManifest(manifest || {});
+            if (manifestErrors.length > 0) {
+                alert(`manifest.json 오류:\n${manifestErrors.join('\n')}`);
+                return;
+            }
+
+            const contentName = manifest.entry && manifest.entry.content ? manifest.entry.content : 'content.json';
+            const settingsName = manifest.entry && manifest.entry.settings ? manifest.entry.settings : 'settings.json';
+
+            const content = parseJsonEntry(files, contentName);
+            const settings = parseJsonEntry(files, settingsName);
+            const contentErrors = validateContent(content || {});
+            const settingsErrors = validateSettings(settings || {});
+            if (contentErrors.length > 0 || settingsErrors.length > 0) {
+                const errors = contentErrors.concat(settingsErrors);
+                alert(`패키지 내용 오류:\n${errors.join('\n')}`);
+                return;
+            }
+
+            state.packageFiles.clear();
+            state.requiredAssets.clear();
+            state.clipboardImage = null;
+            state.selectedImage = null;
+            state.textEditingElement = null;
+            state.imageCounter = 1;
+            state.videoCounter = 1;
+            state.fileCounter = 1;
+            state.lastSaveHandle = null;
+            state.lastPackageFileName = ensurePackageExtension(file.name || '');
+            state.documentCreatedAt = manifest.createdAt || new Date().toISOString();
+            state.legacySource = manifest.legacy || null;
+            resetAssetRegistry();
+
+            for (const [name, data] of files.entries()) {
+                if (name === 'manifest.json' || name === contentName || name === settingsName) continue;
+                const blob = new Blob([data], { type: guessMimeType(name) });
+                state.packageFiles.set(name, blob);
+            }
+
+            if (Array.isArray(manifest.assets)) {
+                manifest.assets.forEach((asset) => {
+                    if (!asset || !asset.id || !asset.path) return;
+                    const blob = state.packageFiles.get(asset.path);
+                    const mime = asset.mime || (blob && blob.type) || guessMimeType(asset.path);
+                    const bytes = blob ? blob.size : (Number.isFinite(asset.bytes) ? asset.bytes : 0);
+                    const record = {
+                        id: asset.id,
+                        path: asset.path,
+                        mime,
+                        bytes,
+                        originalName: asset.originalName || asset.path.split('/').pop() || asset.path
+                    };
+                    state.assetIndex.set(asset.id, record);
+                    state.assetPathToId.set(asset.path, asset.id);
+                });
+            }
+
+            for (const [path, blob] of state.packageFiles.entries()) {
+                if (path.toLowerCase().endsWith('.html') || path.toLowerCase().endsWith('.htm')) {
+                    try {
+                        const text = await blob.text();
+                        registerRequiredAssetsFromHtml(text);
+                    } catch (err) { }
+                }
+            }
+
+            state.packageFiles.forEach((blob, path) => {
+                ensureAssetRecordForPath(path, blob, path.split('/').pop());
+            });
+
+            syncIdCountersFromContent(content, manifest);
+            renderDocumentFromModel(content, settings, manifest);
+            showSaveButton();
+        }
+
+        async function loadPackageFromFile(file, options = {}) {
+            if (!file) return;
+            const skipConfirm = options && options.skipConfirm === true;
+            if (!skipConfirm) {
+                const proceed = confirm("현재 작업을 덮어쓰고 패키지를 불러올까요?");
+                if (!proceed) return;
+            }
+
+            let files;
+            try {
+                const buffer = await file.arrayBuffer();
+                files = parseZipEntries(buffer);
+            } catch (err) {
+                alert(`패키지를 불러오지 못했습니다.\n${err.message}`);
+                return;
+            }
+
+            if (files.has('manifest.json')) {
+                await loadV2Package(files, file);
+                return;
+            }
+
+            const main = findMainHtml(files);
+            if (!main) {
+                alert("프레젠테이션 HTML을 찾지 못했습니다.");
+                return;
+            }
+
+            state.packageFiles.clear();
+            state.requiredAssets.clear();
+            state.clipboardImage = null;
+            state.selectedImage = null;
+            state.textEditingElement = null;
+            state.imageCounter = 1;
+            state.videoCounter = 1;
+            state.fileCounter = 1;
+            state.lastSaveHandle = null;
+            state.lastPackageFileName = ensurePackageExtension(file.name || '');
+            state.documentCreatedAt = new Date().toISOString();
+            state.legacySource = { source: 'html', entry: main.name };
+            state.documentId = '';
+            resetIdCounters();
+            resetAssetRegistry();
+            const embeddedImageCache = new Map();
+            let legacyConvertedCount = 0;
+
+            for (const [name, data] of files.entries()) {
+                if (name === main.name) continue;
+                const blob = new Blob([data], { type: guessMimeType(name) });
+
+                if (name.toLowerCase().endsWith('.html') || name.toLowerCase().endsWith('.htm')) {
+                    try {
+                        const text = await blob.text();
+                        const converted = convertBase64ImagesInHtml(text, embeddedImageCache);
+                        if (converted.converted > 0) {
+                            legacyConvertedCount += converted.converted;
+                            state.packageFiles.set(name, new Blob([converted.html], { type: 'text/html' }));
+                            registerRequiredAssetsFromHtml(converted.html);
+                        } else {
+                            state.packageFiles.set(name, blob);
+                            registerRequiredAssetsFromHtml(text);
+                        }
+                    } catch (err) {
+                        state.packageFiles.set(name, blob);
+                    }
+                } else {
+                    state.packageFiles.set(name, blob);
+                }
+                ensureAssetRecordForPath(name, blob, name.split('/').pop());
+            }
+
+            const parsedDoc = new DOMParser().parseFromString(main.html, 'text/html');
+            legacyConvertedCount += convertEmbeddedImagesInDocument(parsedDoc, embeddedImageCache);
+            const updatedMainHtml = parsedDoc.documentElement.outerHTML;
+            registerRequiredAssetsFromHtml(updatedMainHtml);
+            const parsedStage = parsedDoc.querySelector('#slide-stage');
+            if (!parsedStage) {
+                alert("슬라이드 데이터를 찾지 못했습니다.");
+                return;
+            }
+
+            const loadedWidth = parseInt(parsedStage.style.width) || 1280;
+            if (loadedWidth < 1100) {
+                state.aspectRatio = '4:3';
+            } else {
+                state.aspectRatio = '16:9';
+            }
+            updateStageDimensions();
+
+            const parsedTitle = (parsedDoc.title || '').trim();
+            const mainTitle = stripExtensionFromName(main.name, 'html');
+            const fallbackTitle = stripExtensionFromName(file.name, CONFIG.PACKAGE_EXTENSION);
+            document.title = parsedTitle || mainTitle || fallbackTitle || document.title;
+            state.documentTitle = document.title || state.documentTitle;
+
+            const stage = dom.stage;
+            stage.innerHTML = '';
+            const parsedSlides = parsedStage.querySelectorAll('.slide');
+            parsedSlides.forEach((slide, index) => {
+                const newSlide = document.createElement('div');
+                newSlide.className = 'slide';
+                if (slide.classList.contains('iframe-slide')) newSlide.classList.add('iframe-slide');
+                if (index === 0) newSlide.classList.add('active');
+                newSlide.innerHTML = slide.innerHTML;
+                stage.appendChild(newSlide);
+            });
+
+            const slides = refreshSlides();
+            slides.forEach((slide) => {
+                slide.querySelectorAll('.draggable-img').forEach((wrapper) => {
+                    wrapper.classList.remove('selected');
+                    wrapper.classList.remove('iframe-interactive');
+                    let handle = wrapper.querySelector('.resize-handle');
+                    if (!handle) {
+                        handle = document.createElement('div');
+                        handle.className = 'resize-handle';
+                        wrapper.appendChild(handle);
+                    }
+                    setupInteraction(wrapper, handle);
+                    if (wrapper.classList.contains('draggable-text')) {
+                        initializeTextBox(wrapper);
+                    }
+
+                    const img = wrapper.querySelector('img');
+                    if (!img) return;
+                    const assetPath = normalizeAssetPath(img.getAttribute('src'));
+                    if (!assetPath || !state.packageFiles.has(assetPath)) return;
+                    const url = getAssetUrlByPath(assetPath);
+                    img.src = url;
+                    img.dataset.assetPath = assetPath;
+                });
+
+                slide.querySelectorAll('iframe').forEach((iframe) => {
+                    const srcPath = normalizeAssetPath(iframe.getAttribute('src')) || iframe.dataset.filename;
+                    if (!srcPath || !state.packageFiles.has(srcPath)) return;
+                    const url = getAssetUrlByPath(srcPath);
+                    iframe.dataset.filename = srcPath;
+                    iframe.src = url;
+                    const wrapper = iframe.closest('.draggable-iframe');
+                    if (wrapper) ensureIframeControls(wrapper);
+                });
+
+                slide.querySelectorAll('video').forEach((video) => {
+                    const srcPath = normalizeAssetPath(video.getAttribute('src')) || video.dataset.assetPath;
+                    if (!srcPath || !state.packageFiles.has(srcPath)) return;
+                    const url = getAssetUrlByPath(srcPath);
+                    video.dataset.assetPath = srcPath;
+                    video.src = url;
+                    video.controls = true;
+                    video.playsInline = true;
+                });
+            });
+
+            state.currentSlideIndex = 0;
+            updateSlideVisibility();
+            renderThumbnails();
+            initializeIframeControls();
+            syncModelsFromDom();
+            showSaveButton();
+            resizeStage();
+
+            if (legacyConvertedCount > 0) {
+                alert(`레거시 base64 이미지 ${legacyConvertedCount}개를 에셋으로 변환했습니다.\n저장하면 최신 패키지로 정리됩니다.`);
+            }
+        }
+
+        function scheduleThumbnailRefresh() {
+            if (state.thumbnailRefreshPending) return;
+            state.thumbnailRefreshPending = true;
+            requestAnimationFrame(() => {
+                state.thumbnailRefreshPending = false;
+                renderThumbnails();
+            });
+        }
+
+        function renderThumbnails() {
+            if (!dom.thumbnailStrip) return;
+            dom.thumbnailStrip.innerHTML = '';
+
+            const slides = refreshSlides();
+            const thumbW = 160;
+            const thumbH = Math.round(thumbW * (state.currentStageHeight / state.currentStageWidth));
+            const thumbScaleX = thumbW / state.currentStageWidth;
+            const thumbScaleY = thumbH / state.currentStageHeight;
+            const thumbScale = Math.min(thumbScaleX, thumbScaleY);
+
+            slides.forEach((slide, index) => {
+                const thumb = document.createElement('div');
+                thumb.className = 'thumbnail';
+                thumb.dataset.index = index;
+
+                const inner = document.createElement('div');
+                inner.className = 'thumbnail-inner';
+                inner.style.width = `${state.currentStageWidth}px`;
+                inner.style.height = `${state.currentStageHeight}px`;
+                inner.style.transform = `scale(${thumbScale})`;
+
+                const tx = (thumbW - (state.currentStageWidth * thumbScale)) / 2;
+                const ty = (thumbH - (state.currentStageHeight * thumbScale)) / 2;
+                inner.style.left = `${tx}px`;
+                inner.style.top = `${ty}px`;
+
+                inner.innerHTML = slide.innerHTML;
+
+                inner.querySelectorAll('img[data-asset-path]').forEach((img) => {
+                    const assetPath = img.dataset.assetPath;
+                    if (!assetPath || !state.packageFiles.has(assetPath)) return;
+                    const blob = state.packageFiles.get(assetPath);
+                    const objectUrl = URL.createObjectURL(blob);
+                    img.src = objectUrl;
+                    img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+                    img.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
+                });
+
+                inner.querySelectorAll('video[data-asset-path]').forEach((video) => {
+                    const assetPath = video.dataset.assetPath;
+                    if (!assetPath || !state.packageFiles.has(assetPath)) return;
+                    const blob = state.packageFiles.get(assetPath);
+                    const objectUrl = URL.createObjectURL(blob);
+                    video.src = objectUrl;
+                    video.addEventListener('loadeddata', () => URL.revokeObjectURL(objectUrl), { once: true });
+                    video.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
+                });
+
+                inner.querySelectorAll('iframe').forEach((iframe) => {
+                    const assetPath = iframe.dataset.filename;
+                    if (!assetPath || !state.packageFiles.has(assetPath)) return;
+                    const blob = state.packageFiles.get(assetPath);
+                    const objectUrl = URL.createObjectURL(blob);
+                    iframe.src = objectUrl;
+                    iframe.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+                    iframe.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
+                });
+
+                thumb.appendChild(inner);
+                dom.thumbnailStrip.appendChild(thumb);
+                thumb.addEventListener('click', () => {
+                    state.currentSlideIndex = index;
+                    updateSlideVisibility();
+                });
+            });
+
+            updateThumbnailActive();
+        }
+
+        function updateThumbnailActive() {
+            if (!dom.thumbnailStrip) return;
+            const thumbs = dom.thumbnailStrip.querySelectorAll('.thumbnail');
+            thumbs.forEach((thumb, index) => {
+                thumb.classList.toggle('active', index === state.currentSlideIndex);
+            });
+        }
+
+        function getElementStyleNumber(element, prop, fallback) {
+            const value = parseFloat(element.style[prop]);
+            return Number.isFinite(value) ? value : fallback;
+        }
+
+        function captureImageState(wrapper) {
+            const img = wrapper.querySelector('img[data-asset-path]');
+            if (!img) return null;
+            return {
+                assetPath: img.dataset.assetPath,
+                left: getElementStyleNumber(wrapper, 'left', wrapper.offsetLeft),
+                top: getElementStyleNumber(wrapper, 'top', wrapper.offsetTop),
+                width: getElementStyleNumber(wrapper, 'width', wrapper.offsetWidth),
+                height: getElementStyleNumber(wrapper, 'height', wrapper.offsetHeight)
+            };
+        }
+
+        function copySelectedImage() {
+            if (!state.selectedImage) return;
+            const imageState = captureImageState(state.selectedImage);
+            if (!imageState) return;
+            const previousAsset = state.clipboardImage ? state.clipboardImage.assetPath : null;
+            state.clipboardImage = imageState;
+            if (previousAsset && previousAsset !== imageState.assetPath) removeImageAssetIfUnused(previousAsset);
+        }
+
+        function createDraggableImageFromAsset(assetPath, layout = {}) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const blob = state.packageFiles.get(assetPath);
+            if (!blob) {
+                alert("복사한 이미지 원본을 찾을 수 없습니다.\n다시 복사해주세요.");
+                return;
+            }
+
+            const objectUrl = URL.createObjectURL(blob);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img selected';
+            ensureElementId(wrapper);
+            wrapper.style.left = `${Number.isFinite(layout.left) ? layout.left : 400}px`;
+            wrapper.style.top = `${Number.isFinite(layout.top) ? layout.top : 200}px`;
+            if (Number.isFinite(layout.width)) wrapper.style.width = `${layout.width}px`;
+            if (Number.isFinite(layout.height)) wrapper.style.height = `${layout.height}px`;
+
+            const img = document.createElement('img');
+            img.src = objectUrl;
+            img.dataset.assetPath = assetPath;
+            img.style.width = '100%'; img.style.height = '100%';
+            img.style.display = 'block'; img.ondragstart = () => false;
+            img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+            img.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(img); wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            syncElementModelFromWrapper(wrapper);
+            showSaveButton();
+        }
+
+        function pasteClipboardImage() {
+            if (!state.clipboardImage) return;
+            createDraggableImageFromAsset(state.clipboardImage.assetPath, state.clipboardImage);
+        }
+
+        function updateSlideVisibility() {
+            const slides = refreshSlides();
+            slides.forEach((slide, index) => {
+                slide.classList.remove('active');
+                if (index === state.currentSlideIndex) slide.classList.add('active');
+            });
+            if (dom.indicator) {
+                dom.indicator.textContent = `${state.currentSlideIndex + 1} / ${slides.length}`;
+            }
+            deselectImage();
+            updateThumbnailActive();
+        }
+
+        function nextSlide() {
+            const slides = refreshSlides();
+            if (state.currentSlideIndex < slides.length - 1) {
+                state.currentSlideIndex++;
+                updateSlideVisibility();
+            }
+        }
+
+        function prevSlide() {
+            if (state.currentSlideIndex > 0) {
+                state.currentSlideIndex--;
+                updateSlideVisibility();
+            }
+        }
+
+        function addNewSlide() {
+            const stage = dom.stage;
+            if (!stage) return;
+            const newSlide = document.createElement('div');
+            newSlide.className = 'slide';
+            const slideId = ensureSlideId(newSlide);
+            const slides = refreshSlides();
+            const currentSlide = slides[state.currentSlideIndex];
+            if (currentSlide && currentSlide.nextSibling) {
+                stage.insertBefore(newSlide, currentSlide.nextSibling);
+            } else {
+                stage.appendChild(newSlide);
+            }
+            const insertIndex = Math.min(state.currentSlideIndex + 1, slides.length);
+            ensureSlideModel(slideId, insertIndex);
+            setTimeout(() => {
+                const updatedSlides = refreshSlides();
+                state.currentSlideIndex = Math.min(state.currentSlideIndex + 1, updatedSlides.length - 1);
+                updateSlideVisibility();
+                showSaveButton();
+                renderThumbnails();
+            }, 50);
+        }
+
+        function collectSlideAssets(slide) {
+            const imageAssets = new Set();
+            const htmlAssets = new Set();
+
+            slide.querySelectorAll('img[data-asset-path]').forEach((img) => {
+                if (img.dataset.assetPath) imageAssets.add(img.dataset.assetPath);
+            });
+
+            slide.querySelectorAll('video[data-asset-path]').forEach((video) => {
+                if (video.dataset.assetPath) imageAssets.add(video.dataset.assetPath);
+            });
+
+            slide.querySelectorAll('iframe').forEach((iframe) => {
+                const fileName = iframe.dataset.filename || normalizeAssetPath(iframe.getAttribute('src'));
+                if (fileName) htmlAssets.add(fileName);
+            });
+
+            return { imageAssets, htmlAssets };
+        }
+
+        function deleteCurrentSlide() {
+            requestDeleteSlide(state.currentSlideIndex);
+        }
+
+        function requestDeleteSlide(index) {
+            const slides = refreshSlides();
+            if (!slides.length) return;
+            if (index < 0 || index >= slides.length) return;
+
+            const message = slides.length === 1
+                ? '마지막 슬라이드는 삭제할 수 없어 내용만 비웁니다. 계속할까요?'
+                : '선택한 슬라이드를 삭제할까요?';
+
+            if (!confirm(message)) return;
+            deleteSlideAtIndex(index);
+        }
+
+        function deleteSlideAtIndex(index) {
+            const slides = refreshSlides();
+            if (index < 0 || index >= slides.length) return;
+
+            const slide = slides[index];
+            ensureModelsReady();
+            const slideId = ensureSlideId(slide);
+            const { imageAssets, htmlAssets } = collectSlideAssets(slide);
+
+            if (slides.length === 1) {
+                slide.innerHTML = '';
+                replaceSlideElementsModel(slideId, []);
+                state.currentSlideIndex = 0;
+            } else {
+                slide.remove();
+                removeSlideModel(slideId);
+                const updatedSlides = refreshSlides();
+                if (state.currentSlideIndex > index) {
+                    state.currentSlideIndex -= 1;
+                } else if (state.currentSlideIndex >= updatedSlides.length) {
+                    state.currentSlideIndex = updatedSlides.length - 1;
+                }
+            }
+
+            deselectImage();
+            imageAssets.forEach(removeImageAssetIfUnused);
+            htmlAssets.forEach(removeHtmlAssetIfUnused);
+            updateSlideVisibility();
+            showSaveButton();
+            renderThumbnails();
+        }
+
+        function createDraggableVideoFromSource(source, assetPath) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-video selected';
+            ensureElementId(wrapper);
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            const width = 640;
+            const height = 360;
+            wrapper.style.left = `${cw - (width / 2)}px`;
+            wrapper.style.top = `${ch - (height / 2)}px`;
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+
+            const video = document.createElement('video');
+            video.src = source;
+            video.controls = true;
+            video.playsInline = true;
+            video.preload = 'metadata';
+            if (assetPath) video.dataset.assetPath = assetPath;
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(video);
+            wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            syncElementModelFromWrapper(wrapper);
+            showSaveButton();
+        }
+
+        function createDraggableVideoFromBlob(blob, preferredName) {
+            const assetPath = registerVideoAsset(blob, preferredName);
+            const objectUrl = URL.createObjectURL(blob);
+            createDraggableVideoFromSource(objectUrl, assetPath);
+        }
+
+        function createDraggableVideoFromUrl(url) {
+            createDraggableVideoFromSource(url, null);
+        }
+
+        function createDraggableIframeFromUrl(url, options = {}) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-iframe selected';
+            ensureElementId(wrapper);
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            const width = 640;
+            const height = 360;
+            wrapper.style.left = `${cw - (width / 2)}px`;
+            wrapper.style.top = `${ch - (height / 2)}px`;
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.allowFullscreen = true;
+            iframe.setAttribute('allow', options.allow || 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+            if (options.title) iframe.setAttribute('title', options.title);
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.dataset.elementType = 'embed';
+            wrapper.dataset.embedProvider = options.provider || '';
+            wrapper.dataset.externalUrl = options.sourceUrl || '';
+            wrapper.dataset.embedUrl = url;
+
+            wrapper.appendChild(iframe);
+            wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            ensureIframeControls(wrapper);
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            syncElementModelFromWrapper(wrapper);
+            showSaveButton();
+        }
+
+        function normalizeFontList(value) {
+            return String(value || '')
+                .split(',')
+                .map(entry => entry.replace(/['"]/g, '').trim().toLowerCase())
+                .filter(Boolean);
+        }
+
+        function pickFontFamilyOption(fontFamily) {
+            if (!dom.fontFamilySelect) return '';
+            const families = normalizeFontList(fontFamily);
+            const options = Array.from(dom.fontFamilySelect.options);
+            for (const option of options) {
+                const optionFamilies = normalizeFontList(option.value);
+                if (optionFamilies.some((family) => families.includes(family))) {
+                    return option.value;
+                }
+            }
+            return dom.fontFamilySelect.value || (options[0] ? options[0].value : '');
+        }
+
+        function parseFontSize(value, fallback) {
+            const parsed = Number.parseFloat(value);
+            return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
+        }
+
+        function isFontWeightBold(value) {
+            if (!value) return false;
+            const normalized = String(value).toLowerCase();
+            if (normalized === 'bold' || normalized === 'bolder') return true;
+            const numeric = Number.parseInt(normalized, 10);
+            return Number.isFinite(numeric) && numeric >= 600;
+        }
+
+        function toHexColor(value, fallback) {
+            if (!value) return fallback;
+            const trimmed = value.trim();
+            if (trimmed.startsWith('#')) {
+                if (trimmed.length === 4) {
+                    const r = trimmed[1];
+                    const g = trimmed[2];
+                    const b = trimmed[3];
+                    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+                }
+                if (trimmed.length === 7) return trimmed.toLowerCase();
+            }
+            const match = trimmed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+            if (match) {
+                const [r, g, b] = match.slice(1, 4).map(Number);
+                if ([r, g, b].every(Number.isFinite)) {
+                    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+                }
+            }
+            return fallback;
+        }
+
+        function isTextWrapper(wrapper) {
+            return !!(wrapper && wrapper.classList.contains('draggable-text'));
+        }
+
+        function getTextBox(wrapper) {
+            if (!isTextWrapper(wrapper)) return null;
+            return wrapper.querySelector('.text-box');
+        }
+
+        function getTextStyleFromBox(box) {
+            if (!box) return { ...state.textDefaults };
+            const computed = window.getComputedStyle(box);
+            const fontFamily = box.style.fontFamily || computed.fontFamily || state.textDefaults.fontFamily;
+            const fontSizeValue = box.style.fontSize || computed.fontSize;
+            const fontSize = parseFontSize(fontSizeValue, state.textDefaults.fontSize);
+            const fontColor = toHexColor(box.style.color || computed.color, state.textDefaults.fontColor);
+            const fontWeight = box.style.fontWeight || computed.fontWeight;
+            const fontBold = isFontWeightBold(fontWeight);
+            return { fontFamily, fontSize, fontColor, fontBold };
+        }
+
+        function applyTextStyleToBox(box, style) {
+            if (!box || !style) return;
+            if (style.fontFamily) box.style.fontFamily = style.fontFamily;
+            if (style.fontSize) box.style.fontSize = `${style.fontSize}px`;
+            if (style.fontColor) box.style.color = style.fontColor;
+            if (typeof style.fontBold === 'boolean') {
+                box.style.fontWeight = style.fontBold ? '700' : '400';
+            }
+        }
+
+        function readTextControlValues() {
+            const current = state.textDefaults || {};
+            const next = {
+                fontFamily: current.fontFamily,
+                fontSize: current.fontSize,
+                fontColor: current.fontColor,
+                fontBold: current.fontBold
+            };
+
+            if (dom.fontFamilySelect && dom.fontFamilySelect.value) {
+                next.fontFamily = dom.fontFamilySelect.value;
+            }
+
+            if (dom.fontSizeInput) {
+                const min = Number.parseInt(dom.fontSizeInput.min, 10) || 8;
+                const max = Number.parseInt(dom.fontSizeInput.max, 10) || 200;
+                let fontSize = parseFontSize(dom.fontSizeInput.value, next.fontSize);
+                if (!Number.isFinite(fontSize)) fontSize = next.fontSize;
+                fontSize = Math.min(Math.max(fontSize, min), max);
+                dom.fontSizeInput.value = fontSize;
+                next.fontSize = fontSize;
+            }
+
+            if (dom.fontColorInput && dom.fontColorInput.value) {
+                next.fontColor = dom.fontColorInput.value;
+            }
+
+            if (dom.fontBoldBtn) {
+                next.fontBold = dom.fontBoldBtn.classList.contains('is-active');
+            }
+
+            return next;
+        }
+
+        function setBoldControlState(isBold) {
+            if (!dom.fontBoldBtn) return;
+            const next = !!isBold;
+            dom.fontBoldBtn.classList.toggle('is-active', next);
+            dom.fontBoldBtn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        }
+
+        function syncTextControls(wrapper) {
+            if (!dom.fontFamilySelect || !dom.fontSizeInput || !dom.fontColorInput) return;
+            const box = isTextWrapper(wrapper) ? getTextBox(wrapper) : null;
+            const style = box ? getTextStyleFromBox(box) : state.textDefaults;
+            const matchedFont = pickFontFamilyOption(style.fontFamily);
+            if (matchedFont) dom.fontFamilySelect.value = matchedFont;
+            dom.fontSizeInput.value = style.fontSize;
+            dom.fontColorInput.value = toHexColor(style.fontColor, state.textDefaults.fontColor);
+            setBoldControlState(style.fontBold);
+            state.textDefaults = {
+                fontFamily: dom.fontFamilySelect.value || style.fontFamily,
+                fontSize: parseFontSize(dom.fontSizeInput.value, style.fontSize),
+                fontColor: dom.fontColorInput.value || style.fontColor,
+                fontBold: dom.fontBoldBtn ? dom.fontBoldBtn.classList.contains('is-active') : !!style.fontBold
+            };
+            syncSettingsModelFromState();
+        }
+
+        function applyTextControlsToSelection() {
+            const next = readTextControlValues();
+            state.textDefaults = next;
+            const wrapper = state.selectedImage;
+            if (isTextWrapper(wrapper)) {
+                const box = getTextBox(wrapper);
+                if (box) {
+                    applyTextStyleToBox(box, next);
+                    syncElementModelFromWrapper(wrapper);
+                    showSaveButton();
+                }
+            }
+            syncSettingsModelFromState();
+        }
+
+        function toggleTextBold() {
+            if (!dom.fontBoldBtn) return;
+            const isActive = !dom.fontBoldBtn.classList.contains('is-active');
+            setBoldControlState(isActive);
+            applyTextControlsToSelection();
+        }
+
+        function enterTextEditing(wrapper) {
+            if (document.body.classList.contains('is-fullscreen')) return;
+            if (!isTextWrapper(wrapper)) return;
+            const box = getTextBox(wrapper);
+            if (!box) return;
+            if (state.textEditingElement && state.textEditingElement !== wrapper) {
+                exitTextEditing();
+            }
+            if (state.selectedImage !== wrapper) {
+                selectImage(wrapper);
+            }
+            state.textEditingElement = wrapper;
+            wrapper.classList.add('editing');
+            box.setAttribute('contenteditable', 'true');
+            box.focus({ preventScroll: true });
+            syncTextControls(wrapper);
+        }
+
+        function exitTextEditing() {
+            const wrapper = state.textEditingElement;
+            if (!wrapper) return;
+            const box = getTextBox(wrapper);
+            if (box) {
+                box.setAttribute('contenteditable', 'false');
+            }
+            syncElementModelFromWrapper(wrapper);
+            wrapper.classList.remove('editing');
+            state.textEditingElement = null;
+        }
+
+        function isTextEditingActive(target) {
+            if (state.textEditingElement) {
+                if (document.body.contains(state.textEditingElement)) return true;
+                state.textEditingElement = null;
+            }
+            const node = target || document.activeElement;
+            return !!(node && node.closest && node.closest('.text-box[contenteditable="true"]'));
+        }
+
+        function initializeTextBox(wrapper, options = {}) {
+            if (!isTextWrapper(wrapper)) return;
+            if (wrapper._textInitialized) return;
+            wrapper._textInitialized = true;
+            const box = getTextBox(wrapper);
+            if (!box) return;
+
+            box.setAttribute('spellcheck', 'false');
+            if (!box.dataset.placeholder) box.dataset.placeholder = '텍스트 입력';
+            box.setAttribute('contenteditable', 'false');
+
+            if (!box.style.fontFamily && state.textDefaults.fontFamily) {
+                box.style.fontFamily = state.textDefaults.fontFamily;
+            }
+            if (!box.style.fontSize && state.textDefaults.fontSize) {
+                box.style.fontSize = `${state.textDefaults.fontSize}px`;
+            }
+            if (!box.style.color && state.textDefaults.fontColor) {
+                box.style.color = state.textDefaults.fontColor;
+            }
+            if (!box.style.fontWeight && state.textDefaults.fontBold) {
+                box.style.fontWeight = '700';
+            }
+
+            box.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                enterTextEditing(wrapper);
+            });
+
+            box.addEventListener('blur', () => {
+                if (state.textEditingElement === wrapper) exitTextEditing();
+            });
+
+            box.addEventListener('input', () => {
+                showSaveButton();
+            });
+
+            if (options.autoEdit) {
+                enterTextEditing(wrapper);
+            }
+        }
+
+        function createDraggableTextBox() {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-text selected';
+            ensureElementId(wrapper);
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            const width = 420;
+            const height = 160;
+            wrapper.style.left = `${cw - (width / 2)}px`;
+            wrapper.style.top = `${ch - (height / 2)}px`;
+            wrapper.style.width = `${width}px`;
+            wrapper.style.height = `${height}px`;
+
+            const textBox = document.createElement('div');
+            textBox.className = 'text-box';
+            textBox.dataset.placeholder = '텍스트 입력';
+            textBox.textContent = '';
+            textBox.setAttribute('contenteditable', 'false');
+            textBox.setAttribute('spellcheck', 'false');
+            applyTextStyleToBox(textBox, state.textDefaults);
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(textBox);
+            wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            initializeTextBox(wrapper, { autoEdit: true });
+            syncElementModelFromWrapper(wrapper);
+            showSaveButton();
+        }
+
+        function createDraggableImageFromBlob(blob, preferredName) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const assetPath = registerImageAsset(blob, preferredName);
+            const objectUrl = URL.createObjectURL(blob);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img selected';
+            ensureElementId(wrapper);
+            const cw = state.currentStageWidth / 2;
+            const ch = state.currentStageHeight / 2;
+            wrapper.style.left = (cw - 240) + 'px';
+            wrapper.style.top = (ch - 150) + 'px';
+            wrapper.style.width = '480px';
+
+            const img = document.createElement('img');
+            img.src = objectUrl;
+            img.dataset.assetPath = assetPath;
+            img.style.width = '100%'; img.style.height = '100%';
+            img.style.display = 'block'; img.ondragstart = () => false;
+            img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+            img.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(img); wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            syncElementModelFromWrapper(wrapper);
+            showSaveButton();
+        }
+
+        function setupInteraction(element, handle) {
+            element.addEventListener('mousedown', (e) => {
+                const isFullscreen = document.body.classList.contains('is-fullscreen');
+                const isIframe = element.classList.contains('draggable-iframe');
+                if (isFullscreen && !isIframe) return;
+                if (state.isSpacePressed && element.classList.contains('draggable-iframe')) return;
+                if (e.target === handle) return;
+                if (element.classList.contains('draggable-text') && state.textEditingElement === element) {
+                    if (e.target.closest('.text-box')) return;
+                    exitTextEditing();
+                }
+
+                e.stopPropagation(); selectImage(element);
+
+                const startX = e.clientX;
+                const startY = e.clientY;
+
+                const startLeft = parseFloat(element.style.left || 0);
+                const startTop = parseFloat(element.style.top || 0);
+
+                function onMouseMove(e) {
+                    const dx = (e.clientX - startX) / state.currentScaleX;
+                    const dy = (e.clientY - startY) / state.currentScaleY;
+
+                    element.style.left = (startLeft + dx) + 'px';
+                    element.style.top = (startTop + dy) + 'px';
+                }
+                function onMouseUp() {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    syncElementModelFromWrapper(element);
+                    showSaveButton();
+                }
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+
+            handle.addEventListener('mousedown', (e) => {
+                if (document.body.classList.contains('is-fullscreen')) return;
+
+                e.stopPropagation(); e.preventDefault();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startWidth = parseFloat(getComputedStyle(element).width);
+                const startHeight = parseFloat(getComputedStyle(element).height);
+                const aspectRatio = startWidth / startHeight;
+                const isText = element.classList.contains('draggable-text');
+
+                function onMouseMove(e) {
+                    const dx = (e.clientX - startX) / state.currentScaleX;
+                    const dy = (e.clientY - startY) / state.currentScaleY;
+                    const newWidth = startWidth + dx;
+                    if (isText) {
+                        const newHeight = startHeight + dy;
+                        element.style.width = Math.max(newWidth, 80) + 'px';
+                        element.style.height = Math.max(newHeight, 40) + 'px';
+                        return;
+                    }
+
+                    if (newWidth > 50) {
+                        element.style.width = newWidth + 'px';
+                        element.style.height = (newWidth / aspectRatio) + 'px';
+                        if (element.classList.contains('draggable-iframe')) {
+                            const current = getIframeViewState(element);
+                            applyIframeView(element, current.viewScale, current.offsetX, current.offsetY);
+                        }
+                    }
+                }
+                function onMouseUp() {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    syncElementModelFromWrapper(element);
+                    showSaveButton();
+                }
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+        function selectImage(el) {
+            deselectImage();
+            state.selectedImage = el;
+            el.classList.add('selected');
+            syncTextControls(el);
+        }
+
+        function deselectImage() {
+            if (state.selectedImage) {
+                state.selectedImage.classList.remove('selected');
+                state.selectedImage = null;
+            }
+            exitTextEditing();
+            syncTextControls(null);
+        }
+
+        function deleteSelectedImage() {
+            if (!state.selectedImage) return;
+            if (state.textEditingElement === state.selectedImage) exitTextEditing();
+            const wrapper = state.selectedImage;
+            const img = wrapper.querySelector('img[data-asset-path]');
+            const video = wrapper.querySelector('video[data-asset-path]');
+            const assetPath = img ? img.dataset.assetPath : (video ? video.dataset.assetPath : null);
+            const iframe = wrapper.querySelector('iframe[data-filename]');
+            const htmlFileName = iframe ? iframe.dataset.filename : null;
+            const slide = wrapper.closest('.slide');
+            const slideId = slide ? ensureSlideId(slide) : '';
+            const elementId = ensureElementId(wrapper);
+            removeElementModel(slideId, elementId);
+            wrapper.remove();
+            state.selectedImage = null;
+            removeImageAssetIfUnused(assetPath);
+            removeHtmlAssetIfUnused(htmlFileName);
+            showSaveButton();
+        }
+
+        function showSaveButton() {
+            if (dom.saveBtn) {
+                dom.saveBtn.style.display = 'block';
+                dom.saveBtn.textContent = '💾 저장';
+            }
+            if (dom.saveAsBtn) {
+                dom.saveAsBtn.style.display = 'block';
+            }
+            scheduleThumbnailRefresh();
+        }
+
+        const crcTable = (() => {
+            const table = new Uint32Array(256);
+            for (let i = 0; i < 256; i++) {
+                let c = i;
+                for (let k = 0; k < 8; k++) {
+                    c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                }
+                table[i] = c >>> 0;
+            }
+            return table;
+        })();
+
+        function crc32(data) {
+            let crc = 0xFFFFFFFF;
+            for (let i = 0; i < data.length; i++) {
+                const byte = data[i];
+                crc = crcTable[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+            }
+            return (crc ^ 0xFFFFFFFF) >>> 0;
+        }
+
+        function toDosDateTime(date) {
+            const year = Math.max(1980, date.getFullYear());
+            const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+            const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+            return { dosDate, dosTime };
+        }
+
+        async function toUint8Array(data) {
+            if (data instanceof Uint8Array) return data;
+            if (typeof data === 'string') return textEncoder.encode(data);
+            if (data instanceof Blob) return new Uint8Array(await data.arrayBuffer());
+            return new Uint8Array(0);
+        }
+
+        function buildZip(entries) {
+            let offset = 0;
+            const parts = [];
+            const records = [];
+            const { dosDate, dosTime } = toDosDateTime(new Date());
+
+            for (const entry of entries) {
+                const nameBytes = textEncoder.encode(entry.name);
+                const data = entry.data;
+                const crc = crc32(data);
+
+                const localHeader = new Uint8Array(30 + nameBytes.length);
+                const localView = new DataView(localHeader.buffer);
+                localView.setUint32(0, 0x04034b50, true);
+                localView.setUint16(4, 20, true);
+                localView.setUint16(6, 0x0800, true);
+                localView.setUint16(8, 0, true);
+                localView.setUint16(10, dosTime, true);
+                localView.setUint16(12, dosDate, true);
+                localView.setUint32(14, crc, true);
+                localView.setUint32(18, data.length, true);
+                localView.setUint32(22, data.length, true);
+                localView.setUint16(26, nameBytes.length, true);
+                localView.setUint16(28, 0, true);
+                localHeader.set(nameBytes, 30);
+
+                parts.push(localHeader, data);
+                records.push({ nameBytes, crc, size: data.length, offset, time: dosTime, date: dosDate });
+                offset += localHeader.length + data.length;
+            }
+
+            const centralStart = offset;
+
+            for (const record of records) {
+                const centralHeader = new Uint8Array(46 + record.nameBytes.length);
+                const view = new DataView(centralHeader.buffer);
+                view.setUint32(0, 0x02014b50, true);
+                view.setUint16(4, 20, true);
+                view.setUint16(6, 20, true);
+                view.setUint16(8, 0x0800, true);
+                view.setUint16(10, 0, true);
+                view.setUint16(12, record.time, true);
+                view.setUint16(14, record.date, true);
+                view.setUint32(16, record.crc, true);
+                view.setUint32(20, record.size, true);
+                view.setUint32(24, record.size, true);
+                view.setUint16(28, record.nameBytes.length, true);
+                view.setUint16(30, 0, true);
+                view.setUint16(32, 0, true);
+                view.setUint16(34, 0, true);
+                view.setUint16(36, 0, true);
+                view.setUint32(38, 0, true);
+                view.setUint32(42, record.offset, true);
+                centralHeader.set(record.nameBytes, 46);
+                parts.push(centralHeader);
+                offset += centralHeader.length;
+            }
+
+            const centralSize = offset - centralStart;
+            const end = new Uint8Array(22);
+            const endView = new DataView(end.buffer);
+            endView.setUint32(0, 0x06054b50, true);
+            endView.setUint16(4, 0, true);
+            endView.setUint16(6, 0, true);
+            endView.setUint16(8, records.length, true);
+            endView.setUint16(10, records.length, true);
+            endView.setUint32(12, centralSize, true);
+            endView.setUint32(16, centralStart, true);
+            endView.setUint16(20, 0, true);
+            parts.push(end);
+
+            return new Blob(parts, { type: 'application/zip' });
+        }
+
+        function savePackageAs() {
+            savePackage({ forceSaveAs: true });
+        }
+
+        async function savePackage(options = {}) {
+            deselectImage();
+
+            const missingAssets = getMissingAssets();
+            if (missingAssets.length > 0) {
+                const preview = missingAssets.slice(0, 10).join('\n');
+                const more = missingAssets.length > 10 ? `\n...외 ${missingAssets.length - 10}개` : '';
+                const proceed = confirm(`다음 리소스가 패키지에 없습니다:\n${preview}${more}\n\nShift/Alt 드래그로 지원 파일만 추가할 수 있습니다.\n그래도 저장할까요?`);
+                if (!proceed) return;
+            }
+            const forceSaveAs = options.forceSaveAs === true;
+            const date = new Date();
+            const timeString = `${date.getHours()}시${date.getMinutes()}분`;
+            const defaultBaseName = `Presentation_Package_${timeString}`;
+            const defaultPackageName = `${defaultBaseName}.${CONFIG.PACKAGE_EXTENSION}`;
+            let packageHandle = forceSaveAs ? null : state.lastSaveHandle;
+            let packageFileName = ensurePackageExtension(state.lastPackageFileName) || defaultPackageName;
+            if (!packageFileName) packageFileName = defaultPackageName;
+
+            if (!packageHandle) {
+                try {
+                    if (window.showSaveFilePicker) {
+                        packageHandle = await window.showSaveFilePicker({
+                            suggestedName: packageFileName,
+                            types: [{ description: `Package (*.${CONFIG.PACKAGE_EXTENSION})`, accept: { 'application/zip': [`.${CONFIG.PACKAGE_EXTENSION}`] } }],
+                        });
+                        if (packageHandle && packageHandle.name) {
+                            packageFileName = packageHandle.name;
+                        }
+                        state.lastSaveHandle = packageHandle;
+                        state.lastPackageFileName = packageFileName;
+                    }
+                } catch (err) { console.log(err); }
+            } else if (packageHandle.name) {
+                packageFileName = packageHandle.name;
+            }
+
+            const baseTitle = stripExtensionFromName(packageFileName, CONFIG.PACKAGE_EXTENSION) || defaultBaseName;
+            document.title = baseTitle;
+            state.documentTitle = baseTitle;
+            state.lastPackageFileName = packageFileName;
+
+            const { assetIdByPath, assets } = buildAssetIdMapping();
+            let contentModel = state.documentModel;
+            if (!contentModel || !Array.isArray(contentModel.slides)) {
+                contentModel = buildContentFromDom(assetIdByPath);
+                contentModel = normalizeContentModel(contentModel);
+                state.documentModel = contentModel;
+            }
+            let settingsModel;
+            if (state.settingsModel) {
+                settingsModel = syncSettingsModelFromState();
+            } else {
+                settingsModel = buildSettingsFromDom();
+                settingsModel = normalizeSettingsModel(settingsModel);
+                state.settingsModel = settingsModel;
+            }
+            const manifestModel = buildManifest(assets);
+
+            const entries = [
+                { name: 'manifest.json', data: textEncoder.encode(JSON.stringify(manifestModel, null, 2)) },
+                { name: 'content.json', data: textEncoder.encode(JSON.stringify(contentModel, null, 2)) },
+                { name: 'settings.json', data: textEncoder.encode(JSON.stringify(settingsModel, null, 2)) }
+            ];
+            for (const [name, blob] of state.packageFiles.entries()) {
+                entries.push({ name, data: await toUint8Array(blob) });
+            }
+
+            const content = buildZip(entries);
+
+            try {
+                if (packageHandle) {
+                    const writable = await packageHandle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    alert("패키지 파일로 저장되었습니다!");
+                    return;
+                }
+            } catch (err) { console.log(err); }
+
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(content);
+            link.href = url;
+            link.download = packageFileName;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+            alert("다운로드 폴더에 패키지 파일로 저장되었습니다!");
+        }
+
+        function bindEvents() {
+            if (dom.navPrev) dom.navPrev.addEventListener('click', prevSlide);
+            if (dom.navNext) dom.navNext.addEventListener('click', nextSlide);
+            if (dom.ratioBtn) dom.ratioBtn.addEventListener('click', toggleAspectRatio);
+            if (dom.fitBtn) dom.fitBtn.addEventListener('click', toggleDisplayMode);
+            if (dom.invertBtn) dom.invertBtn.addEventListener('click', toggleInvertMode);
+            if (dom.fsBtn) dom.fsBtn.addEventListener('click', startPresentation);
+            if (dom.addSlideBtn) dom.addSlideBtn.addEventListener('click', addNewSlide);
+            if (dom.addTextBtn) dom.addTextBtn.addEventListener('click', createDraggableTextBox);
+            if (dom.fontBoldBtn) dom.fontBoldBtn.addEventListener('click', toggleTextBold);
+            if (dom.deleteSlideBtn) dom.deleteSlideBtn.addEventListener('click', deleteCurrentSlide);
+            if (dom.deleteElementBtn) dom.deleteElementBtn.addEventListener('click', deleteSelectedImage);
+            if (dom.openPackageBtn) dom.openPackageBtn.addEventListener('click', triggerPackageLoad);
+            if (dom.saveBtn) dom.saveBtn.addEventListener('click', savePackage);
+            if (dom.saveAsBtn) dom.saveAsBtn.addEventListener('click', savePackageAs);
+
+            const handleTextControlChange = () => applyTextControlsToSelection();
+            if (dom.fontFamilySelect) dom.fontFamilySelect.addEventListener('change', handleTextControlChange);
+            if (dom.fontSizeInput) {
+                dom.fontSizeInput.addEventListener('input', handleTextControlChange);
+                dom.fontSizeInput.addEventListener('change', handleTextControlChange);
+            }
+            if (dom.fontColorInput) dom.fontColorInput.addEventListener('input', handleTextControlChange);
+
+            window.addEventListener('resize', resizeStage);
+
+            window.addEventListener('wheel', (e) => {
+                if (dom.thumbnailStrip && dom.thumbnailStrip.contains(e.target)) return;
+                const iframeWrapper = e.target.closest('.draggable-iframe');
+                if (iframeWrapper) {
+                    if (iframeWrapper.classList.contains('iframe-interactive')) return;
+                    const metrics = getWrapperMetrics(iframeWrapper);
+                    const anchor = {
+                        x: (e.clientX - metrics.rect.left) / metrics.scaleX,
+                        y: (e.clientY - metrics.rect.top) / metrics.scaleY
+                    };
+                    const current = getIframeViewState(iframeWrapper);
+                    const zoomFactor = Math.exp(-e.deltaY * 0.001);
+                    const nextScale = current.viewScale / zoomFactor;
+                    zoomIframeView(iframeWrapper, nextScale, anchor);
+                    e.preventDefault();
+                    return;
+                }
+                if (e.target.closest('.draggable-video')) return;
+                if (isTextEditingActive(e.target)) return;
+                if (e.deltaY > 0) nextSlide(); else prevSlide();
+            }, { passive: false });
+
+            if (dom.thumbnailStrip) {
+                dom.thumbnailStrip.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    dom.thumbnailStrip.scrollLeft += (e.deltaY + e.deltaX);
+                }, { passive: false });
+
+                dom.thumbnailStrip.addEventListener('contextmenu', (e) => {
+                    const thumb = e.target.closest('.thumbnail');
+                    if (!thumb) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const index = Number.parseInt(thumb.dataset.index, 10);
+                    if (Number.isFinite(index)) requestDeleteSlide(index);
+                });
+            }
+
+            window.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                if (e.target.closest('.draggable-iframe')) return;
+                if (e.target.closest('.draggable-video')) return;
+                if (document.body.classList.contains('is-fullscreen')) {
+                    if (state.currentSlideIndex === 0) return;
+                    prevSlide();
+                } else {
+                    nextSlide();
+                }
+            });
+
+            window.addEventListener('click', (e) => {
+                if (!document.body.classList.contains('is-fullscreen')) return;
+                if (e.target.closest('button') || e.target.closest('.nav-zone')) return;
+                if (e.target.closest('.draggable-iframe')) return;
+                if (e.target.closest('.draggable-video')) return;
+
+                const slides = refreshSlides();
+                if (state.currentSlideIndex >= slides.length - 1) {
+                    exitPresentation();
+                    state.currentSlideIndex = 0;
+                    updateSlideVisibility();
+                } else {
+                    nextSlide();
+                }
+            });
+
+            window.addEventListener('keydown', (e) => {
+                const isModKey = e.ctrlKey || e.metaKey;
+                const key = e.key.toLowerCase();
+                const isTextEditing = isTextEditingActive(e.target);
+
+                if (isTextEditing) {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        exitTextEditing();
+                    }
+                    return;
+                }
+
+                const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+                if (isFormField) return;
+
+                if (e.code === 'Space' || e.key === ' ') {
+                    if (!state.isSpacePressed) {
+                        state.isSpacePressed = true;
+                        document.body.classList.add('pan-mode');
+                    }
+                    e.preventDefault();
+                    return;
+                }
+
+                const canCopyImage = state.selectedImage && state.selectedImage.querySelector('img[data-asset-path]');
+                if (isModKey && key === 'c' && canCopyImage) {
+                    e.preventDefault();
+                    copySelectedImage();
+                    return;
+                }
+
+                if (isModKey && key === 'v') {
+                    if (state.clipboardImage) {
+                        e.preventDefault();
+                        pasteClipboardImage();
+                    }
+                    return;
+                }
+
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevSlide();
+                if (e.key === 'Delete' && state.selectedImage) deleteSelectedImage();
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space' || e.key === ' ') {
+                    state.isSpacePressed = false;
+                    document.body.classList.remove('pan-mode');
+                    document.body.classList.remove('is-panning');
+                    state.activeIframePan = null;
+                }
+            });
+
+            if (dom.packageInput) {
+                dom.packageInput.addEventListener('change', (e) => {
+                    const file = e.target.files && e.target.files[0];
+                    if (file) loadPackageFromFile(file);
+                });
+            }
+
+            const stage = dom.stage;
+            stage.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                stage.classList.add('drag-over');
+            });
+
+            stage.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            stage.addEventListener('dragleave', (e) => {
+                if (!stage.contains(e.relatedTarget)) stage.classList.remove('drag-over');
+            });
+
+            stage.addEventListener('drop', (e) => {
+                e.preventDefault();
+                stage.classList.remove('drag-over');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleDroppedFiles(files, { supportOnly: e.shiftKey || e.altKey });
+                    return;
+                }
+                const urlText = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+                const url = parseUrlCandidate(urlText);
+                if (url && isVideoUrl(url)) {
+                    createDraggableVideoFromUrl(url);
+                    return;
+                }
+                const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
+                if (youtubeEmbed) {
+                    createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video', provider: 'youtube', sourceUrl: url });
+                }
+            });
+
+            document.addEventListener('dragover', (e) => { e.preventDefault(); });
+            document.addEventListener('drop', (e) => {
+                if (!stage.contains(e.target)) e.preventDefault();
+                stage.classList.remove('drag-over');
+            });
+
+            window.addEventListener('paste', (e) => {
+                if (isTextEditingActive(e.target)) return;
+                const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+                if (isFormField) return;
+                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                for (let item of items) {
+                    if (item.type.includes('image')) {
+                        const blob = item.getAsFile();
+                        if (blob) createDraggableImageFromBlob(blob);
+                    } else if (item.type === 'text/plain' || item.type === 'text/uri-list') {
+                        item.getAsString((text) => {
+                            const url = parseUrlCandidate(text);
+                            if (url && isVideoUrl(url)) {
+                                createDraggableVideoFromUrl(url);
+                                return;
+                            }
+                            const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
+                            if (youtubeEmbed) {
+                                createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video', provider: 'youtube', sourceUrl: url });
+                            }
+                        });
+                    }
+                }
+            });
+
+            document.addEventListener('mousedown', (e) => {
+                if (state.textEditingElement) {
+                    const editingBox = getTextBox(state.textEditingElement);
+                    if (editingBox && !editingBox.contains(e.target)) exitTextEditing();
+                }
+                if (!e.target.closest('.draggable-img') && !e.target.closest('button') && !e.target.closest('.nav-zone') && !e.target.closest('.text-controls')) {
+                    deselectImage();
+                }
+            });
+
+            document.addEventListener('mousedown', (e) => {
+                if (!state.isSpacePressed) return;
+                if (e.button !== 0) return;
+                const wrapper = e.target.closest('.draggable-iframe');
+                if (!wrapper) return;
+                if (wrapper.classList.contains('iframe-interactive')) return;
+                if (e.target.closest('.iframe-controls')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const current = getIframeViewState(wrapper);
+                const metrics = getWrapperMetrics(wrapper);
+                state.activeIframePan = {
+                    wrapper,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    originX: current.offsetX,
+                    originY: current.offsetY,
+                    viewScale: current.viewScale,
+                    scaleX: metrics.scaleX,
+                    scaleY: metrics.scaleY
+                };
+                document.body.classList.add('is-panning');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!state.activeIframePan) return;
+                const pan = state.activeIframePan;
+                const dx = (e.clientX - pan.startX) / pan.scaleX;
+                const dy = (e.clientY - pan.startY) / pan.scaleY;
+                const nextX = pan.originX + dx;
+                const nextY = pan.originY + dy;
+                applyIframeView(pan.wrapper, pan.viewScale, nextX, nextY);
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!state.activeIframePan) return;
+                state.activeIframePan = null;
+                document.body.classList.remove('is-panning');
+                showSaveButton();
+            });
+        }
+
+        function handleDroppedFiles(files, options = {}) {
+            const supportOnly = options.supportOnly === true;
+            let addedSupport = false;
+
+            for (const file of files) {
+                const fileName = file.name.toLowerCase();
+                if (!supportOnly) {
+                    if (file.type.startsWith('image/')) {
+                        createDraggableImageFromBlob(file, file.name);
+                    } else if (file.type.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|m4v)$/i.test(fileName)) {
+                        createDraggableVideoFromBlob(file, file.name);
+                    } else if (fileName.endsWith('.html') || fileName.endsWith('.htm') || file.type === 'text/html') {
+                        transformCurrentSlideToHtml(file);
+                    } else {
+                        registerSupportFile(file);
+                        addedSupport = true;
+                    }
+                } else {
+                    registerSupportFile(file);
+                    addedSupport = true;
+                }
+            }
+
+            if (addedSupport) showSaveButton();
+        }
+
+        function transformCurrentSlideToHtml(fileOrName) {
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return;
+            removeGuideText(activeSlide);
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'draggable-img draggable-iframe selected';
+            ensureElementId(wrapper);
+            wrapper.style.left = '320px';
+            wrapper.style.top = '180px';
+            wrapper.style.width = '640px';
+            wrapper.style.height = '360px';
+
+            const iframe = document.createElement('iframe');
+            let displayName = "";
+
+            if (fileOrName instanceof File) {
+                let baseName = sanitizeFileName(fileOrName.name || '');
+                if (baseName && !baseName.includes('.')) baseName = `${baseName}.html`;
+                const fallbackName = `slide_${String(state.fileCounter++).padStart(3, '0')}.html`;
+                const fileName = uniquePath(baseName || fallbackName);
+
+                state.packageFiles.set(fileName, fileOrName);
+                iframe.dataset.filename = fileName;
+                displayName = fileName;
+
+                const objectUrl = URL.createObjectURL(fileOrName);
+                iframe.src = objectUrl;
+                iframe.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+
+                fileOrName.text()
+                    .then(text => registerRequiredAssetsFromHtml(text))
+                    .catch(() => { });
+            } else {
+                iframe.src = './' + fileOrName;
+                displayName = fileOrName;
+                iframe.dataset.filename = fileOrName;
+            }
+
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+
+            wrapper.appendChild(iframe);
+            wrapper.appendChild(handle);
+            activeSlide.appendChild(wrapper);
+
+            ensureIframeControls(wrapper);
+            setupInteraction(wrapper, handle);
+            selectImage(wrapper);
+            syncElementModelFromWrapper(wrapper);
+            showSaveButton();
+        }
+
+        let cursorHideTimer = null;
+
+        function hideCursorLater() {
+            if (cursorHideTimer) clearTimeout(cursorHideTimer);
+            cursorHideTimer = setTimeout(() => {
+                document.body.classList.add('cursor-hidden');
+            }, CONFIG.CURSOR_HIDE_DELAY_MS);
+        }
+
+        function showCursor() {
+            if (cursorHideTimer) clearTimeout(cursorHideTimer);
+            cursorHideTimer = null;
+            document.body.classList.remove('cursor-hidden');
+        }
+
+        function startPresentation() {
+            document.body.classList.add('is-fullscreen');
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            }
+            resizeStage();
+            hideCursorLater();
+        }
+
+        function exitPresentation() {
+            document.body.classList.remove('is-fullscreen');
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            }
+            resizeStage();
+            showCursor();
+        }
+
+        document.addEventListener('mousemove', () => {
+            if (!document.body.classList.contains('is-fullscreen')) return;
+            document.body.classList.remove('cursor-hidden');
+            hideCursorLater();
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                document.body.classList.remove('is-fullscreen');
+                showCursor();
+            }
+            resizeStage();
+        });
+
+        function init() {
+            state.documentTitle = document.title || state.documentTitle;
+            bindEvents();
+            updateInvertButton();
+            resizeStage();
+            updateSlideVisibility();
+            renderThumbnails();
+            initializeIframeControls();
+            syncModelsFromDom();
+        }
+
+        init();
+
+        (function setupPackageAutoLoad() {
+            const params = new URLSearchParams(window.location.search);
+            const packageUrl = params.get('package');
+            if (!packageUrl) return;
+
+            const loadFromUrl = async (url) => {
+                try {
+                    const resolvedUrl = new URL(url, window.location.href);
+                    const response = await fetch(resolvedUrl.toString());
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const buffer = await response.arrayBuffer();
+                    const rawName = resolvedUrl.pathname.split('/').pop() || 'package.altppt';
+                    const fileName = decodeURIComponent(rawName);
+                    const file = new File([buffer], fileName, { type: 'application/zip' });
+                    await loadPackageFromFile(file, { skipConfirm: true });
+                } catch (err) {
+                    alert(`패키지를 불러오지 못했습니다.\n${err.message || err}`);
+                }
+            };
+
+            loadFromUrl(packageUrl);
+        })();
+    </script>
+</body>
+</html>
