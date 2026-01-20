@@ -2,3 +2,6 @@
 bin/
 obj/
 dist/
+
+*:Zone.Identifier
+alt-ppt4lecture.zip
