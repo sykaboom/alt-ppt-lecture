@@ -36,9 +36,6 @@
             wrapper.style.width = `${Number.isFinite(element.width) ? element.width : 320}px`;
             wrapper.style.height = `${Number.isFinite(element.height) ? element.height : 180}px`;
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
-
             if (element.type === 'image') {
                 const img = document.createElement('img');
                 let src = '';
@@ -57,6 +54,10 @@
                 img.style.display = 'block';
                 img.ondragstart = () => false;
                 wrapper.appendChild(img);
+                const handles = createMediaResizeHandles();
+                handles.forEach((item) => wrapper.appendChild(item));
+                setupInteraction(wrapper, handles);
+                return wrapper;
             } else if (element.type === 'video') {
                 const video = document.createElement('video');
                 let src = '';
@@ -76,6 +77,10 @@
                 video.playsInline = true;
                 video.preload = 'metadata';
                 wrapper.appendChild(video);
+                const handles = createMediaResizeHandles();
+                handles.forEach((item) => wrapper.appendChild(item));
+                setupInteraction(wrapper, handles);
+                return wrapper;
             } else if (element.type === 'html' || element.type === 'embed') {
                 const iframe = document.createElement('iframe');
                 let src = '';
@@ -99,15 +104,16 @@
                     wrapper.dataset.embedUrl = element.embedUrl || '';
                 }
 
+                const handles = createIframeResizeHandles();
                 wrapper.appendChild(iframe);
-                wrapper.appendChild(handle);
+                handles.forEach((item) => wrapper.appendChild(item));
 
                 if (element.fov) {
                     applyIframeView(wrapper, element.fov.scale || 1, element.fov.offsetX || 0, element.fov.offsetY || 0);
                 }
 
                 ensureIframeControls(wrapper);
-                setupInteraction(wrapper, handle);
+                setupInteraction(wrapper, handles);
                 return wrapper;
             } else if (element.type === 'text') {
                 const textBox = document.createElement('div');
@@ -123,12 +129,11 @@
                     if (element.style.fontWeight) textBox.style.fontWeight = String(element.style.fontWeight);
                 }
                 wrapper.appendChild(textBox);
-            }
-
-            wrapper.appendChild(handle);
-            setupInteraction(wrapper, handle);
-            if (wrapper.classList.contains('draggable-text')) {
+                const handle = createResizeHandle('corner');
+                wrapper.appendChild(handle);
+                setupInteraction(wrapper, handle);
                 initializeTextBox(wrapper);
+                return wrapper;
             }
             return wrapper;
         }

@@ -1,3 +1,38 @@
+        function getDefaultIframeLayout() {
+            const scale = 0.75;
+            const width = Math.round(state.currentStageWidth * scale);
+            const height = Math.round(state.currentStageHeight * scale);
+            const left = Math.round((state.currentStageWidth - width) / 2);
+            const top = Math.round((state.currentStageHeight - height) / 2);
+            return { width, height, left, top };
+        }
+
+        function createResizeHandle(kind) {
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            if (kind && kind !== 'corner') {
+                handle.classList.add(`resize-handle-${kind}`);
+                handle.dataset.resize = kind;
+            } else {
+                handle.dataset.resize = 'corner';
+            }
+            return handle;
+        }
+
+        function createMediaResizeHandles() {
+            return [
+                createResizeHandle('corner'),
+                createResizeHandle('e'),
+                createResizeHandle('w'),
+                createResizeHandle('n'),
+                createResizeHandle('s')
+            ];
+        }
+
+        function createIframeResizeHandles() {
+            return createMediaResizeHandles();
+        }
+
         function createDraggableVideoFromSource(source, assetPath) {
             const activeSlide = getActiveSlide();
             if (!activeSlide) return;
@@ -22,14 +57,13 @@
             video.preload = 'metadata';
             if (assetPath) video.dataset.assetPath = assetPath;
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createMediaResizeHandles();
 
             wrapper.appendChild(video);
-            wrapper.appendChild(handle);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
@@ -53,14 +87,11 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'draggable-img draggable-iframe selected';
             ensureElementId(wrapper);
-            const cw = state.currentStageWidth / 2;
-            const ch = state.currentStageHeight / 2;
-            const width = 640;
-            const height = 360;
-            wrapper.style.left = `${cw - (width / 2)}px`;
-            wrapper.style.top = `${ch - (height / 2)}px`;
-            wrapper.style.width = `${width}px`;
-            wrapper.style.height = `${height}px`;
+            const layout = getDefaultIframeLayout();
+            wrapper.style.left = `${layout.left}px`;
+            wrapper.style.top = `${layout.top}px`;
+            wrapper.style.width = `${layout.width}px`;
+            wrapper.style.height = `${layout.height}px`;
 
             const iframe = document.createElement('iframe');
             iframe.src = url;
@@ -68,8 +99,7 @@
             iframe.setAttribute('allow', options.allow || 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
             if (options.title) iframe.setAttribute('title', options.title);
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createIframeResizeHandles();
 
             wrapper.dataset.elementType = 'embed';
             wrapper.dataset.embedProvider = options.provider || '';
@@ -77,11 +107,11 @@
             wrapper.dataset.embedUrl = url;
 
             wrapper.appendChild(iframe);
-            wrapper.appendChild(handle);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
             ensureIframeControls(wrapper);
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
@@ -399,25 +429,25 @@
             img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
             img.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createMediaResizeHandles();
 
-            wrapper.appendChild(img); wrapper.appendChild(handle);
+            wrapper.appendChild(img);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
         }
 
-        function setupInteraction(element, handle) {
+        function setupInteraction(element, handles) {
             element.addEventListener('mousedown', (e) => {
                 const isFullscreen = document.body.classList.contains('is-fullscreen');
                 const isIframe = element.classList.contains('draggable-iframe');
                 if (isFullscreen && !isIframe) return;
                 if (state.isSpacePressed && element.classList.contains('draggable-iframe')) return;
-                if (e.target === handle) return;
+                if (e.target.closest('.resize-handle')) return;
                 if (element.classList.contains('draggable-text') && state.textEditingElement === element) {
                     if (e.target.closest('.text-box')) return;
                     exitTextEditing();
@@ -448,44 +478,93 @@
                 document.addEventListener('mouseup', onMouseUp);
             });
 
-            handle.addEventListener('mousedown', (e) => {
-                if (document.body.classList.contains('is-fullscreen')) return;
+            const handleList = Array.isArray(handles) ? handles : (handles ? [handles] : []);
+            handleList.forEach((handle) => {
+                handle.addEventListener('mousedown', (e) => {
+                    if (document.body.classList.contains('is-fullscreen')) return;
 
-                e.stopPropagation(); e.preventDefault();
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const startWidth = parseFloat(getComputedStyle(element).width);
-                const startHeight = parseFloat(getComputedStyle(element).height);
-                const aspectRatio = startWidth / startHeight;
-                const isText = element.classList.contains('draggable-text');
+                    e.stopPropagation(); e.preventDefault();
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const startWidth = parseFloat(getComputedStyle(element).width);
+                    const startHeight = parseFloat(getComputedStyle(element).height);
+                    const startLeft = parseFloat(element.style.left || 0);
+                    const startTop = parseFloat(element.style.top || 0);
+                    const aspectRatio = startWidth / startHeight;
+                    const isText = element.classList.contains('draggable-text');
+                    const isIframe = element.classList.contains('draggable-iframe');
+                    const resizeMode = handle.dataset.resize || 'corner';
 
-                function onMouseMove(e) {
-                    const dx = (e.clientX - startX) / state.currentScaleX;
-                    const dy = (e.clientY - startY) / state.currentScaleY;
-                    const newWidth = startWidth + dx;
-                    if (isText) {
-                        const newHeight = startHeight + dy;
-                        element.style.width = Math.max(newWidth, 80) + 'px';
-                        element.style.height = Math.max(newHeight, 40) + 'px';
-                        return;
+                    function applyIframeResizeUpdate() {
+                        if (!isIframe) return;
+                        const current = getIframeViewState(element);
+                        applyIframeView(element, current.viewScale, current.offsetX, current.offsetY);
                     }
 
-                    if (newWidth > 50) {
-                        element.style.width = newWidth + 'px';
-                        element.style.height = (newWidth / aspectRatio) + 'px';
-                        if (element.classList.contains('draggable-iframe')) {
-                            const current = getIframeViewState(element);
-                            applyIframeView(element, current.viewScale, current.offsetX, current.offsetY);
+                    function onMouseMove(e) {
+                        const dx = (e.clientX - startX) / state.currentScaleX;
+                        const dy = (e.clientY - startY) / state.currentScaleY;
+
+                        if (resizeMode === 'corner') {
+                            if (isText) {
+                                const minWidth = 80;
+                                const minHeight = 40;
+                                element.style.width = Math.max(startWidth + dx, minWidth) + 'px';
+                                element.style.height = Math.max(startHeight + dy, minHeight) + 'px';
+                                return;
+                            }
+
+                            const newWidth = startWidth + dx;
+                            if (newWidth > 50) {
+                                element.style.width = newWidth + 'px';
+                                element.style.height = (newWidth / aspectRatio) + 'px';
+                                applyIframeResizeUpdate();
+                            }
+                            return;
+                        }
+
+                        const minWidth = isText ? 80 : (isIframe ? 100 : 50);
+                        const minHeight = isText ? 40 : (isIframe ? 60 : 50);
+
+                        if (resizeMode === 'e') {
+                            element.style.width = Math.max(startWidth + dx, minWidth) + 'px';
+                            applyIframeResizeUpdate();
+                            return;
+                        }
+
+                        if (resizeMode === 'w') {
+                            const rawWidth = startWidth - dx;
+                            const nextWidth = Math.max(rawWidth, minWidth);
+                            const usedDx = startWidth - nextWidth;
+                            element.style.width = nextWidth + 'px';
+                            element.style.left = (startLeft + usedDx) + 'px';
+                            applyIframeResizeUpdate();
+                            return;
+                        }
+
+                        if (resizeMode === 's') {
+                            element.style.height = Math.max(startHeight + dy, minHeight) + 'px';
+                            applyIframeResizeUpdate();
+                            return;
+                        }
+
+                        if (resizeMode === 'n') {
+                            const rawHeight = startHeight - dy;
+                            const nextHeight = Math.max(rawHeight, minHeight);
+                            const usedDy = startHeight - nextHeight;
+                            element.style.height = nextHeight + 'px';
+                            element.style.top = (startTop + usedDy) + 'px';
+                            applyIframeResizeUpdate();
                         }
                     }
-                }
-                function onMouseUp() {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    syncElementModelFromWrapper(element);
-                    showSaveButton();
-                }
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
+                    function onMouseUp() {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                        syncElementModelFromWrapper(element);
+                        showSaveButton();
+                    }
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
             });
         }

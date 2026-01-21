@@ -49,6 +49,10 @@
             border: 2px solid transparent; 
             min-width: 50px;
             min-height: 50px;
+            --resize-corner-hit: 24px;
+            --resize-edge-hit: 16px;
+            --resize-corner-gap: 20px;
+            --resize-visible-size: 10px;
         }
 
         .draggable-text {
@@ -83,13 +87,61 @@
         }
 
         .resize-handle {
-            width: 15px; height: 15px;
-            background: #007bff;
+            width: var(--resize-corner-hit);
+            height: var(--resize-corner-hit);
+            background: transparent;
             position: absolute;
-            right: -5px; bottom: -5px;
+            right: calc(var(--resize-corner-hit) / -2);
+            bottom: calc(var(--resize-corner-hit) / -2);
             cursor: se-resize; 
             display: none; 
             z-index: 1001;
+        }
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            width: var(--resize-visible-size);
+            height: var(--resize-visible-size);
+            background: #007bff;
+            border-radius: 2px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .resize-handle[data-resize="corner"] {
+            z-index: 1002;
+        }
+        .resize-handle.resize-handle-e,
+        .resize-handle.resize-handle-w {
+            width: var(--resize-edge-hit);
+            height: calc(100% - (var(--resize-corner-gap) * 2));
+            top: var(--resize-corner-gap);
+            bottom: var(--resize-corner-gap);
+            cursor: ew-resize;
+        }
+        .resize-handle.resize-handle-e {
+            right: calc(var(--resize-edge-hit) / -2);
+            left: auto;
+        }
+        .resize-handle.resize-handle-w {
+            left: calc(var(--resize-edge-hit) / -2);
+            right: auto;
+        }
+        .resize-handle.resize-handle-n,
+        .resize-handle.resize-handle-s {
+            height: var(--resize-edge-hit);
+            width: calc(100% - (var(--resize-corner-gap) * 2));
+            left: var(--resize-corner-gap);
+            right: var(--resize-corner-gap);
+            cursor: ns-resize;
+        }
+        .resize-handle.resize-handle-n {
+            top: calc(var(--resize-edge-hit) / -2);
+            bottom: auto;
+        }
+        .resize-handle.resize-handle-s {
+            bottom: calc(var(--resize-edge-hit) / -2);
+            top: auto;
         }
         .draggable-img.selected .resize-handle {
             display: block; 

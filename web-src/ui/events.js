@@ -122,14 +122,6 @@
                     return;
                 }
 
-                if (isModKey && key === 'v') {
-                    if (state.clipboardImage) {
-                        e.preventDefault();
-                        pasteClipboardImage();
-                    }
-                    return;
-                }
-
                 if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevSlide();
                 if (e.key === 'Delete' && state.selectedImage) deleteSelectedImage();
@@ -191,28 +183,66 @@
                 stage.classList.remove('drag-over');
             });
 
-            window.addEventListener('paste', (e) => {
+            window.addEventListener('paste', async (e) => {
                 if (isTextEditingActive(e.target)) return;
                 const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
                 if (isFormField) return;
-                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                for (let item of items) {
-                    if (item.type.includes('image')) {
+                const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
+                if (!clipboardData) return;
+                const items = Array.from(clipboardData.items || []);
+
+                const imageItems = items.filter((item) => item.type && item.type.startsWith('image/'));
+                if (imageItems.length > 0) {
+                    e.preventDefault();
+                    if (imageItems.length === 1 && state.clipboardImage) {
+                        const blob = imageItems[0].getAsFile();
+                        if (blob && await doesClipboardImageMatchInternal(blob)) {
+                            pasteClipboardImage();
+                            return;
+                        }
+                    }
+                    imageItems.forEach((item) => {
                         const blob = item.getAsFile();
                         if (blob) createDraggableImageFromBlob(blob);
-                    } else if (item.type === 'text/plain' || item.type === 'text/uri-list') {
+                    });
+                    if (state.clipboardImage) {
+                        clearClipboardImage();
+                    }
+                    return;
+                }
+
+                const textItems = items.filter((item) => item.type === 'text/plain' || item.type === 'text/uri-list');
+                if (textItems.length > 0) {
+                    e.preventDefault();
+                    let pending = textItems.length;
+                    let textHandled = false;
+
+                    textItems.forEach((item) => {
                         item.getAsString((text) => {
                             const url = parseUrlCandidate(text);
                             if (url && isVideoUrl(url)) {
                                 createDraggableVideoFromUrl(url);
-                                return;
+                                textHandled = true;
+                            } else {
+                                const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
+                                if (youtubeEmbed) {
+                                    createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video', provider: 'youtube', sourceUrl: url });
+                                    textHandled = true;
+                                }
                             }
-                            const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
-                            if (youtubeEmbed) {
-                                createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video', provider: 'youtube', sourceUrl: url });
+
+                            pending -= 1;
+                            if (pending === 0 && !textHandled && state.clipboardImage) {
+                                pasteClipboardImage();
                             }
                         });
-                    }
+                    });
+                    return;
+                }
+
+                if (state.clipboardImage) {
+                    e.preventDefault();
+                    pasteClipboardImage();
                 }
             });
 
@@ -302,10 +332,11 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'draggable-img draggable-iframe selected';
             ensureElementId(wrapper);
-            wrapper.style.left = '320px';
-            wrapper.style.top = '180px';
-            wrapper.style.width = '640px';
-            wrapper.style.height = '360px';
+            const layout = getDefaultIframeLayout();
+            wrapper.style.left = `${layout.left}px`;
+            wrapper.style.top = `${layout.top}px`;
+            wrapper.style.width = `${layout.width}px`;
+            wrapper.style.height = `${layout.height}px`;
 
             const iframe = document.createElement('iframe');
             let displayName = "";
@@ -333,15 +364,14 @@
                 iframe.dataset.filename = fileOrName;
             }
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createIframeResizeHandles();
 
             wrapper.appendChild(iframe);
-            wrapper.appendChild(handle);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
             ensureIframeControls(wrapper);
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();

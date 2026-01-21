@@ -56,6 +56,10 @@
             border: 2px solid transparent; 
             min-width: 50px;
             min-height: 50px;
+            --resize-corner-hit: 24px;
+            --resize-edge-hit: 16px;
+            --resize-corner-gap: 20px;
+            --resize-visible-size: 10px;
         }
 
         .draggable-text {
@@ -90,13 +94,61 @@
         }
 
         .resize-handle {
-            width: 15px; height: 15px;
-            background: #007bff;
+            width: var(--resize-corner-hit);
+            height: var(--resize-corner-hit);
+            background: transparent;
             position: absolute;
-            right: -5px; bottom: -5px;
+            right: calc(var(--resize-corner-hit) / -2);
+            bottom: calc(var(--resize-corner-hit) / -2);
             cursor: se-resize; 
             display: none; 
             z-index: 1001;
+        }
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            width: var(--resize-visible-size);
+            height: var(--resize-visible-size);
+            background: #007bff;
+            border-radius: 2px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .resize-handle[data-resize="corner"] {
+            z-index: 1002;
+        }
+        .resize-handle.resize-handle-e,
+        .resize-handle.resize-handle-w {
+            width: var(--resize-edge-hit);
+            height: calc(100% - (var(--resize-corner-gap) * 2));
+            top: var(--resize-corner-gap);
+            bottom: var(--resize-corner-gap);
+            cursor: ew-resize;
+        }
+        .resize-handle.resize-handle-e {
+            right: calc(var(--resize-edge-hit) / -2);
+            left: auto;
+        }
+        .resize-handle.resize-handle-w {
+            left: calc(var(--resize-edge-hit) / -2);
+            right: auto;
+        }
+        .resize-handle.resize-handle-n,
+        .resize-handle.resize-handle-s {
+            height: var(--resize-edge-hit);
+            width: calc(100% - (var(--resize-corner-gap) * 2));
+            left: var(--resize-corner-gap);
+            right: var(--resize-corner-gap);
+            cursor: ns-resize;
+        }
+        .resize-handle.resize-handle-n {
+            top: calc(var(--resize-edge-hit) / -2);
+            bottom: auto;
+        }
+        .resize-handle.resize-handle-s {
+            bottom: calc(var(--resize-edge-hit) / -2);
+            top: auto;
         }
         .draggable-img.selected .resize-handle {
             display: block; 
@@ -1773,9 +1825,6 @@
             wrapper.style.width = `${Number.isFinite(element.width) ? element.width : 320}px`;
             wrapper.style.height = `${Number.isFinite(element.height) ? element.height : 180}px`;
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
-
             if (element.type === 'image') {
                 const img = document.createElement('img');
                 let src = '';
@@ -1794,6 +1843,10 @@
                 img.style.display = 'block';
                 img.ondragstart = () => false;
                 wrapper.appendChild(img);
+                const handles = createMediaResizeHandles();
+                handles.forEach((item) => wrapper.appendChild(item));
+                setupInteraction(wrapper, handles);
+                return wrapper;
             } else if (element.type === 'video') {
                 const video = document.createElement('video');
                 let src = '';
@@ -1813,6 +1866,10 @@
                 video.playsInline = true;
                 video.preload = 'metadata';
                 wrapper.appendChild(video);
+                const handles = createMediaResizeHandles();
+                handles.forEach((item) => wrapper.appendChild(item));
+                setupInteraction(wrapper, handles);
+                return wrapper;
             } else if (element.type === 'html' || element.type === 'embed') {
                 const iframe = document.createElement('iframe');
                 let src = '';
@@ -1836,15 +1893,16 @@
                     wrapper.dataset.embedUrl = element.embedUrl || '';
                 }
 
+                const handles = createIframeResizeHandles();
                 wrapper.appendChild(iframe);
-                wrapper.appendChild(handle);
+                handles.forEach((item) => wrapper.appendChild(item));
 
                 if (element.fov) {
                     applyIframeView(wrapper, element.fov.scale || 1, element.fov.offsetX || 0, element.fov.offsetY || 0);
                 }
 
                 ensureIframeControls(wrapper);
-                setupInteraction(wrapper, handle);
+                setupInteraction(wrapper, handles);
                 return wrapper;
             } else if (element.type === 'text') {
                 const textBox = document.createElement('div');
@@ -1860,12 +1918,11 @@
                     if (element.style.fontWeight) textBox.style.fontWeight = String(element.style.fontWeight);
                 }
                 wrapper.appendChild(textBox);
-            }
-
-            wrapper.appendChild(handle);
-            setupInteraction(wrapper, handle);
-            if (wrapper.classList.contains('draggable-text')) {
+                const handle = createResizeHandle('corner');
+                wrapper.appendChild(handle);
+                setupInteraction(wrapper, handle);
                 initializeTextBox(wrapper);
+                return wrapper;
             }
             return wrapper;
         }
@@ -2668,9 +2725,11 @@
             if (!state.selectedImage) return;
             const imageState = captureImageState(state.selectedImage);
             if (!imageState) return;
+            imageState.fingerprint = null;
             const previousAsset = state.clipboardImage ? state.clipboardImage.assetPath : null;
             state.clipboardImage = imageState;
             if (previousAsset && previousAsset !== imageState.assetPath) removeImageAssetIfUnused(previousAsset);
+            syncImageClipboardToSystem(imageState.assetPath);
         }
 
         function createDraggableImageFromAsset(assetPath, layout = {}) {
@@ -2702,13 +2761,13 @@
             img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
             img.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createMediaResizeHandles();
 
-            wrapper.appendChild(img); wrapper.appendChild(handle);
+            wrapper.appendChild(img);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
@@ -2717,6 +2776,90 @@
         function pasteClipboardImage() {
             if (!state.clipboardImage) return;
             createDraggableImageFromAsset(state.clipboardImage.assetPath, state.clipboardImage);
+        }
+
+        function clearClipboardImage() {
+            if (!state.clipboardImage) return;
+            const assetPath = state.clipboardImage.assetPath;
+            state.clipboardImage = null;
+            if (assetPath) removeImageAssetIfUnused(assetPath);
+        }
+
+        function syncImageClipboardToSystem(assetPath) {
+            if (!assetPath) return;
+            if (!navigator.clipboard || !window.ClipboardItem) return;
+            const blob = state.packageFiles.get(assetPath);
+            if (!blob) return;
+            const mime = blob.type || guessMimeType(assetPath);
+            const payload = blob.type ? blob : new Blob([blob], { type: mime });
+            const item = new ClipboardItem({ [mime]: payload });
+            navigator.clipboard.write([item]).catch(() => { });
+        }
+
+        async function doesClipboardImageMatchInternal(blob) {
+            if (!blob || !state.clipboardImage) return false;
+            const assetPath = state.clipboardImage.assetPath;
+            if (!assetPath) return false;
+            const assetBlob = state.packageFiles.get(assetPath);
+            if (!assetBlob) return false;
+            if (Number.isFinite(assetBlob.size) && Number.isFinite(blob.size) && assetBlob.size !== blob.size) {
+                return false;
+            }
+            const assetType = assetBlob.type || guessMimeType(assetPath);
+            const blobType = blob.type || '';
+            if (assetType && blobType && assetType !== blobType) return false;
+
+            const [assetFingerprint, blobFingerprint] = await Promise.all([
+                getClipboardAssetFingerprint(assetBlob, assetPath),
+                getBlobFingerprint(blob)
+            ]);
+            return !!assetFingerprint && assetFingerprint === blobFingerprint;
+        }
+
+        async function getClipboardAssetFingerprint(assetBlob, assetPath) {
+            if (!state.clipboardImage) return '';
+            if (state.clipboardImage.fingerprint) return state.clipboardImage.fingerprint;
+            const fingerprint = await getBlobFingerprint(assetBlob, assetPath);
+            if (state.clipboardImage && state.clipboardImage.assetPath === assetPath) {
+                state.clipboardImage.fingerprint = fingerprint;
+            }
+            return fingerprint;
+        }
+
+        async function getBlobFingerprint(blob) {
+            if (!blob) return '';
+            let buffer;
+            try {
+                buffer = await blob.arrayBuffer();
+            } catch (err) {
+                return '';
+            }
+            if (window.crypto && window.crypto.subtle && window.crypto.subtle.digest) {
+                try {
+                    const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+                    return bufferToHex(digest);
+                } catch (err) { }
+            }
+            return hashArrayBuffer(buffer);
+        }
+
+        function bufferToHex(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let hex = '';
+            for (let i = 0; i < bytes.length; i += 1) {
+                hex += bytes[i].toString(16).padStart(2, '0');
+            }
+            return hex;
+        }
+
+        function hashArrayBuffer(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let hash = 2166136261;
+            for (let i = 0; i < bytes.length; i += 1) {
+                hash ^= bytes[i];
+                hash = Math.imul(hash, 16777619);
+            }
+            return (hash >>> 0).toString(16);
         }
 
         function updateSlideVisibility() {
@@ -2840,6 +2983,41 @@
             renderThumbnails();
         }
 
+        function getDefaultIframeLayout() {
+            const scale = 0.75;
+            const width = Math.round(state.currentStageWidth * scale);
+            const height = Math.round(state.currentStageHeight * scale);
+            const left = Math.round((state.currentStageWidth - width) / 2);
+            const top = Math.round((state.currentStageHeight - height) / 2);
+            return { width, height, left, top };
+        }
+
+        function createResizeHandle(kind) {
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            if (kind && kind !== 'corner') {
+                handle.classList.add(`resize-handle-${kind}`);
+                handle.dataset.resize = kind;
+            } else {
+                handle.dataset.resize = 'corner';
+            }
+            return handle;
+        }
+
+        function createMediaResizeHandles() {
+            return [
+                createResizeHandle('corner'),
+                createResizeHandle('e'),
+                createResizeHandle('w'),
+                createResizeHandle('n'),
+                createResizeHandle('s')
+            ];
+        }
+
+        function createIframeResizeHandles() {
+            return createMediaResizeHandles();
+        }
+
         function createDraggableVideoFromSource(source, assetPath) {
             const activeSlide = getActiveSlide();
             if (!activeSlide) return;
@@ -2864,14 +3042,13 @@
             video.preload = 'metadata';
             if (assetPath) video.dataset.assetPath = assetPath;
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createMediaResizeHandles();
 
             wrapper.appendChild(video);
-            wrapper.appendChild(handle);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
@@ -2895,14 +3072,11 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'draggable-img draggable-iframe selected';
             ensureElementId(wrapper);
-            const cw = state.currentStageWidth / 2;
-            const ch = state.currentStageHeight / 2;
-            const width = 640;
-            const height = 360;
-            wrapper.style.left = `${cw - (width / 2)}px`;
-            wrapper.style.top = `${ch - (height / 2)}px`;
-            wrapper.style.width = `${width}px`;
-            wrapper.style.height = `${height}px`;
+            const layout = getDefaultIframeLayout();
+            wrapper.style.left = `${layout.left}px`;
+            wrapper.style.top = `${layout.top}px`;
+            wrapper.style.width = `${layout.width}px`;
+            wrapper.style.height = `${layout.height}px`;
 
             const iframe = document.createElement('iframe');
             iframe.src = url;
@@ -2910,8 +3084,7 @@
             iframe.setAttribute('allow', options.allow || 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
             if (options.title) iframe.setAttribute('title', options.title);
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createIframeResizeHandles();
 
             wrapper.dataset.elementType = 'embed';
             wrapper.dataset.embedProvider = options.provider || '';
@@ -2919,11 +3092,11 @@
             wrapper.dataset.embedUrl = url;
 
             wrapper.appendChild(iframe);
-            wrapper.appendChild(handle);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
             ensureIframeControls(wrapper);
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
@@ -3241,25 +3414,25 @@
             img.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
             img.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createMediaResizeHandles();
 
-            wrapper.appendChild(img); wrapper.appendChild(handle);
+            wrapper.appendChild(img);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
         }
 
-        function setupInteraction(element, handle) {
+        function setupInteraction(element, handles) {
             element.addEventListener('mousedown', (e) => {
                 const isFullscreen = document.body.classList.contains('is-fullscreen');
                 const isIframe = element.classList.contains('draggable-iframe');
                 if (isFullscreen && !isIframe) return;
                 if (state.isSpacePressed && element.classList.contains('draggable-iframe')) return;
-                if (e.target === handle) return;
+                if (e.target.closest('.resize-handle')) return;
                 if (element.classList.contains('draggable-text') && state.textEditingElement === element) {
                     if (e.target.closest('.text-box')) return;
                     exitTextEditing();
@@ -3290,45 +3463,94 @@
                 document.addEventListener('mouseup', onMouseUp);
             });
 
-            handle.addEventListener('mousedown', (e) => {
-                if (document.body.classList.contains('is-fullscreen')) return;
+            const handleList = Array.isArray(handles) ? handles : (handles ? [handles] : []);
+            handleList.forEach((handle) => {
+                handle.addEventListener('mousedown', (e) => {
+                    if (document.body.classList.contains('is-fullscreen')) return;
 
-                e.stopPropagation(); e.preventDefault();
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const startWidth = parseFloat(getComputedStyle(element).width);
-                const startHeight = parseFloat(getComputedStyle(element).height);
-                const aspectRatio = startWidth / startHeight;
-                const isText = element.classList.contains('draggable-text');
+                    e.stopPropagation(); e.preventDefault();
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const startWidth = parseFloat(getComputedStyle(element).width);
+                    const startHeight = parseFloat(getComputedStyle(element).height);
+                    const startLeft = parseFloat(element.style.left || 0);
+                    const startTop = parseFloat(element.style.top || 0);
+                    const aspectRatio = startWidth / startHeight;
+                    const isText = element.classList.contains('draggable-text');
+                    const isIframe = element.classList.contains('draggable-iframe');
+                    const resizeMode = handle.dataset.resize || 'corner';
 
-                function onMouseMove(e) {
-                    const dx = (e.clientX - startX) / state.currentScaleX;
-                    const dy = (e.clientY - startY) / state.currentScaleY;
-                    const newWidth = startWidth + dx;
-                    if (isText) {
-                        const newHeight = startHeight + dy;
-                        element.style.width = Math.max(newWidth, 80) + 'px';
-                        element.style.height = Math.max(newHeight, 40) + 'px';
-                        return;
+                    function applyIframeResizeUpdate() {
+                        if (!isIframe) return;
+                        const current = getIframeViewState(element);
+                        applyIframeView(element, current.viewScale, current.offsetX, current.offsetY);
                     }
 
-                    if (newWidth > 50) {
-                        element.style.width = newWidth + 'px';
-                        element.style.height = (newWidth / aspectRatio) + 'px';
-                        if (element.classList.contains('draggable-iframe')) {
-                            const current = getIframeViewState(element);
-                            applyIframeView(element, current.viewScale, current.offsetX, current.offsetY);
+                    function onMouseMove(e) {
+                        const dx = (e.clientX - startX) / state.currentScaleX;
+                        const dy = (e.clientY - startY) / state.currentScaleY;
+
+                        if (resizeMode === 'corner') {
+                            if (isText) {
+                                const minWidth = 80;
+                                const minHeight = 40;
+                                element.style.width = Math.max(startWidth + dx, minWidth) + 'px';
+                                element.style.height = Math.max(startHeight + dy, minHeight) + 'px';
+                                return;
+                            }
+
+                            const newWidth = startWidth + dx;
+                            if (newWidth > 50) {
+                                element.style.width = newWidth + 'px';
+                                element.style.height = (newWidth / aspectRatio) + 'px';
+                                applyIframeResizeUpdate();
+                            }
+                            return;
+                        }
+
+                        const minWidth = isText ? 80 : (isIframe ? 100 : 50);
+                        const minHeight = isText ? 40 : (isIframe ? 60 : 50);
+
+                        if (resizeMode === 'e') {
+                            element.style.width = Math.max(startWidth + dx, minWidth) + 'px';
+                            applyIframeResizeUpdate();
+                            return;
+                        }
+
+                        if (resizeMode === 'w') {
+                            const rawWidth = startWidth - dx;
+                            const nextWidth = Math.max(rawWidth, minWidth);
+                            const usedDx = startWidth - nextWidth;
+                            element.style.width = nextWidth + 'px';
+                            element.style.left = (startLeft + usedDx) + 'px';
+                            applyIframeResizeUpdate();
+                            return;
+                        }
+
+                        if (resizeMode === 's') {
+                            element.style.height = Math.max(startHeight + dy, minHeight) + 'px';
+                            applyIframeResizeUpdate();
+                            return;
+                        }
+
+                        if (resizeMode === 'n') {
+                            const rawHeight = startHeight - dy;
+                            const nextHeight = Math.max(rawHeight, minHeight);
+                            const usedDy = startHeight - nextHeight;
+                            element.style.height = nextHeight + 'px';
+                            element.style.top = (startTop + usedDy) + 'px';
+                            applyIframeResizeUpdate();
                         }
                     }
-                }
-                function onMouseUp() {
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    syncElementModelFromWrapper(element);
-                    showSaveButton();
-                }
-                document.addEventListener('mousemove', onMouseMove);
-                document.addEventListener('mouseup', onMouseUp);
+                    function onMouseUp() {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                        syncElementModelFromWrapper(element);
+                        showSaveButton();
+                    }
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
             });
         }
 
@@ -3705,14 +3927,6 @@
                     return;
                 }
 
-                if (isModKey && key === 'v') {
-                    if (state.clipboardImage) {
-                        e.preventDefault();
-                        pasteClipboardImage();
-                    }
-                    return;
-                }
-
                 if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSlide();
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevSlide();
                 if (e.key === 'Delete' && state.selectedImage) deleteSelectedImage();
@@ -3774,28 +3988,66 @@
                 stage.classList.remove('drag-over');
             });
 
-            window.addEventListener('paste', (e) => {
+            window.addEventListener('paste', async (e) => {
                 if (isTextEditingActive(e.target)) return;
                 const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
                 if (isFormField) return;
-                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                for (let item of items) {
-                    if (item.type.includes('image')) {
+                const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
+                if (!clipboardData) return;
+                const items = Array.from(clipboardData.items || []);
+
+                const imageItems = items.filter((item) => item.type && item.type.startsWith('image/'));
+                if (imageItems.length > 0) {
+                    e.preventDefault();
+                    if (imageItems.length === 1 && state.clipboardImage) {
+                        const blob = imageItems[0].getAsFile();
+                        if (blob && await doesClipboardImageMatchInternal(blob)) {
+                            pasteClipboardImage();
+                            return;
+                        }
+                    }
+                    imageItems.forEach((item) => {
                         const blob = item.getAsFile();
                         if (blob) createDraggableImageFromBlob(blob);
-                    } else if (item.type === 'text/plain' || item.type === 'text/uri-list') {
+                    });
+                    if (state.clipboardImage) {
+                        clearClipboardImage();
+                    }
+                    return;
+                }
+
+                const textItems = items.filter((item) => item.type === 'text/plain' || item.type === 'text/uri-list');
+                if (textItems.length > 0) {
+                    e.preventDefault();
+                    let pending = textItems.length;
+                    let textHandled = false;
+
+                    textItems.forEach((item) => {
                         item.getAsString((text) => {
                             const url = parseUrlCandidate(text);
                             if (url && isVideoUrl(url)) {
                                 createDraggableVideoFromUrl(url);
-                                return;
+                                textHandled = true;
+                            } else {
+                                const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
+                                if (youtubeEmbed) {
+                                    createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video', provider: 'youtube', sourceUrl: url });
+                                    textHandled = true;
+                                }
                             }
-                            const youtubeEmbed = url ? getYouTubeEmbedUrl(url) : null;
-                            if (youtubeEmbed) {
-                                createDraggableIframeFromUrl(youtubeEmbed, { label: 'YouTube', title: 'YouTube video', provider: 'youtube', sourceUrl: url });
+
+                            pending -= 1;
+                            if (pending === 0 && !textHandled && state.clipboardImage) {
+                                pasteClipboardImage();
                             }
                         });
-                    }
+                    });
+                    return;
+                }
+
+                if (state.clipboardImage) {
+                    e.preventDefault();
+                    pasteClipboardImage();
                 }
             });
 
@@ -3885,10 +4137,11 @@
             const wrapper = document.createElement('div');
             wrapper.className = 'draggable-img draggable-iframe selected';
             ensureElementId(wrapper);
-            wrapper.style.left = '320px';
-            wrapper.style.top = '180px';
-            wrapper.style.width = '640px';
-            wrapper.style.height = '360px';
+            const layout = getDefaultIframeLayout();
+            wrapper.style.left = `${layout.left}px`;
+            wrapper.style.top = `${layout.top}px`;
+            wrapper.style.width = `${layout.width}px`;
+            wrapper.style.height = `${layout.height}px`;
 
             const iframe = document.createElement('iframe');
             let displayName = "";
@@ -3916,15 +4169,14 @@
                 iframe.dataset.filename = fileOrName;
             }
 
-            const handle = document.createElement('div');
-            handle.className = 'resize-handle';
+            const handles = createIframeResizeHandles();
 
             wrapper.appendChild(iframe);
-            wrapper.appendChild(handle);
+            handles.forEach((handle) => wrapper.appendChild(handle));
             activeSlide.appendChild(wrapper);
 
             ensureIframeControls(wrapper);
-            setupInteraction(wrapper, handle);
+            setupInteraction(wrapper, handles);
             selectImage(wrapper);
             syncElementModelFromWrapper(wrapper);
             showSaveButton();
