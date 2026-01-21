@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
@@ -11,6 +12,7 @@ namespace AltPptPlayer;
 
 public partial class MainWindow : Window
 {
+    private const string WebView2InstallerUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
     private string? _workRoot;
     private bool _isFullscreen;
     private WindowState _prevWindowState;
@@ -79,13 +81,25 @@ public partial class MainWindow : Window
         var installerPath = Path.Combine(AppContext.BaseDirectory, "MicrosoftEdgeWebView2Setup.exe");
         if (!File.Exists(installerPath))
         {
-            OpenWebView2DownloadPage();
             MessageBox.Show(
                 this,
-                "Installer not found. The download page has been opened.\nInstall and restart the app.",
+                "WebView2 installer not found. Downloading it now...",
                 "Alt PPT Player",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+
+            installerPath = await DownloadWebView2InstallerAsync() ?? installerPath;
+        }
+
+        if (!File.Exists(installerPath))
+        {
+            OpenWebView2DownloadPage();
+            MessageBox.Show(
+                this,
+                "Installer download failed. The download page has been opened.\nInstall and restart the app.",
+                "Alt PPT Player",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return false;
         }
 
@@ -136,13 +150,37 @@ public partial class MainWindow : Window
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                FileName = WebView2InstallerUrl,
                 UseShellExecute = true
             });
         }
         catch
         {
             // Best-effort: if the browser can't be opened, just fall back to manual install.
+        }
+    }
+
+    private static async Task<string?> DownloadWebView2InstallerAsync()
+    {
+        try
+        {
+            var targetDir = Path.Combine(Path.GetTempPath(), "AltPptPlayer");
+            Directory.CreateDirectory(targetDir);
+            var targetPath = Path.Combine(targetDir, "MicrosoftEdgeWebView2Setup.exe");
+
+            using var client = new HttpClient();
+            using var response = await client.GetAsync(WebView2InstallerUrl, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+
+            await using var input = await response.Content.ReadAsStreamAsync();
+            await using var output = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
+            await input.CopyToAsync(output);
+
+            return targetPath;
+        }
+        catch
+        {
+            return null;
         }
     }
 

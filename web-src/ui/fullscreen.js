@@ -41,7 +41,7 @@
                 if (wrapper.classList.contains('iframe-interactive')) {
                     snapshot.add(id);
                 }
-                setIframeInteractive(wrapper, false);
+                setIframeInteractive(wrapper, true);
             });
             return snapshot;
         }
