@@ -107,11 +107,9 @@
                 if (isFormField) return;
 
                 if (e.key === 'F5' || e.code === 'F5') {
-                    const reloaded = reloadEmbeddedHtml();
-                    if (reloaded) {
-                        e.preventDefault();
-                        return;
-                    }
+                    reloadCurrentSlideAssets();
+                    e.preventDefault();
+                    return;
                 }
 
                 if (e.code === 'Space' || e.key === ' ') {

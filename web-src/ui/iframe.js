@@ -206,10 +206,9 @@
             if (assetPath && state.packageFiles.has(assetPath)) {
                 const blob = state.packageFiles.get(assetPath);
                 if (!blob) return false;
-                const objectUrl = URL.createObjectURL(blob);
+                const objectUrl = refreshAssetUrl(assetPath);
+                if (!objectUrl) return false;
                 iframe.src = objectUrl;
-                iframe.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
-                iframe.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
                 return true;
             }
 
@@ -222,20 +221,46 @@
             return true;
         }
 
-        function reloadEmbeddedHtml() {
-            if (state.selectedImage && state.selectedImage.classList.contains('draggable-iframe')) {
-                return reloadIframeWrapper(state.selectedImage);
+        function refreshAssetUrl(assetPath) {
+            if (!assetPath) return '';
+            const cached = state.assetObjectUrls.get(assetPath);
+            if (cached) {
+                URL.revokeObjectURL(cached);
+                state.assetObjectUrls.delete(assetPath);
             }
+            return getAssetUrlByPath(assetPath);
+        }
 
+        function reloadCurrentSlideAssets() {
             const activeSlide = getActiveSlide();
             if (!activeSlide) return false;
-            let reloaded = false;
+            let didReload = false;
+
+            activeSlide.querySelectorAll('img[data-asset-path]').forEach((img) => {
+                const assetPath = img.dataset.assetPath;
+                if (!assetPath || !state.packageFiles.has(assetPath)) return;
+                const objectUrl = refreshAssetUrl(assetPath);
+                if (!objectUrl) return;
+                img.src = objectUrl;
+                didReload = true;
+            });
+
+            activeSlide.querySelectorAll('video[data-asset-path]').forEach((video) => {
+                const assetPath = video.dataset.assetPath;
+                if (!assetPath || !state.packageFiles.has(assetPath)) return;
+                const objectUrl = refreshAssetUrl(assetPath);
+                if (!objectUrl) return;
+                video.src = objectUrl;
+                didReload = true;
+            });
+
             activeSlide.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
                 if (reloadIframeWrapper(wrapper)) {
-                    reloaded = true;
+                    didReload = true;
                 }
             });
-            return reloaded;
+
+            return didReload;
         }
 
         function initializeIframeControls() {
