@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -27,6 +28,12 @@ public partial class MainWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         var packagePath = ResolvePackagePathFromArgs();
+
+        if (!await EnsureWebView2RuntimeAsync())
+        {
+            Close();
+            return;
+        }
 
         try
         {
@@ -57,6 +64,156 @@ public partial class MainWindow : Window
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    private async Task<bool> EnsureWebView2RuntimeAsync()
+    {
+        if (IsWebView2RuntimeAvailable()) return true;
+
+        var result = MessageBox.Show(
+            this,
+            "Microsoft Edge WebView2 Runtime is required.\nInstall it now?",
+            "Alt PPT Player",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return false;
+
+        var installerPath = Path.Combine(AppContext.BaseDirectory, "MicrosoftEdgeWebView2Setup.exe");
+        if (!File.Exists(installerPath))
+        {
+            OpenWebView2DownloadPage();
+            MessageBox.Show(
+                this,
+                "Installer not found. The download page has been opened.\nInstall and restart the app.",
+                "Alt PPT Player",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return false;
+        }
+
+        var launched = await RunWebView2InstallerAsync(installerPath);
+        if (!launched)
+        {
+            MessageBox.Show(
+                this,
+                "Unable to start the WebView2 installer.\nInstall and restart the app.",
+                "Alt PPT Player",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
+        }
+
+        var installed = await WaitForWebView2RuntimeAsync(TimeSpan.FromMinutes(2));
+        if (!installed)
+        {
+            MessageBox.Show(
+                this,
+                "WebView2 installation did not complete.\nInstall and restart the app.",
+                "Alt PPT Player",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        RestartApp();
+        return false;
+    }
+
+    private static bool IsWebView2RuntimeAvailable()
+    {
+        try
+        {
+            var version = CoreWebView2Environment.GetAvailableBrowserVersionString();
+            return !string.IsNullOrWhiteSpace(version);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void OpenWebView2DownloadPage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            // Best-effort: if the browser can't be opened, just fall back to manual install.
+        }
+    }
+
+    private static async Task<bool> RunWebView2InstallerAsync(string installerPath)
+    {
+        try
+        {
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = installerPath,
+                Arguments = "/silent /install",
+                UseShellExecute = true
+            });
+            if (process == null) return false;
+
+            await Task.Run(() => process.WaitForExit());
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static async Task<bool> WaitForWebView2RuntimeAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (IsWebView2RuntimeAvailable()) return true;
+            await Task.Delay(1000);
+        }
+        return IsWebView2RuntimeAvailable();
+    }
+
+    private void RestartApp()
+    {
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exePath)) return;
+
+        var args = BuildRestartArguments();
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = exePath,
+            Arguments = args,
+            UseShellExecute = true
+        });
+
+        Application.Current.Shutdown();
+    }
+
+    private static string BuildRestartArguments()
+    {
+        var args = Environment.GetCommandLineArgs();
+        if (args.Length <= 1) return string.Empty;
+
+        var parts = new string[args.Length - 1];
+        for (var i = 1; i < args.Length; i++)
+        {
+            parts[i - 1] = QuoteArgument(args[i]);
+        }
+        return string.Join(" ", parts);
+    }
+
+    private static string QuoteArgument(string arg)
+    {
+        if (string.IsNullOrEmpty(arg)) return "\"\"";
+        if (arg.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return arg;
+        return "\"" + arg.Replace("\"", "\\\"") + "\"";
+    }
+
     private async Task InitializeWebViewAsync(string? packagePath)
     {
         var runtimeRoot = PrepareRuntimeRoot(packagePath, out var initialUrl);
@@ -71,6 +228,7 @@ public partial class MainWindow : Window
         var settings = PlayerView.CoreWebView2.Settings;
         settings.AreDefaultContextMenusEnabled = false;
         settings.IsZoomControlEnabled = false;
+        settings.AreBrowserAcceleratorKeysEnabled = false;
 
         PlayerView.CoreWebView2.NavigationCompleted += (_, _) =>
         {

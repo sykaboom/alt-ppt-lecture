@@ -396,6 +396,15 @@
             box-shadow: 0 0 0 2px rgba(50,163,255,0.4), 0 6px 12px rgba(0,0,0,0.5);
         }
 
+        .thumbnail.dragging {
+            opacity: 0.5;
+        }
+
+        .thumbnail.drop-target {
+            outline: 2px dashed rgba(255,255,255,0.8);
+            outline-offset: 3px;
+        }
+
         .thumbnail-inner {
             /* 썸네일 내부도 JS에서 크기 조절 예정 */
             width: 1280px;
@@ -615,6 +624,7 @@
             indicator: document.getElementById('page-indicator'),
             navPrev: document.getElementById('nav-prev'),
             navNext: document.getElementById('nav-next'),
+            uiControls: document.getElementById('ui-controls'),
             saveBtn: document.getElementById('save-btn'),
             saveAsBtn: document.getElementById('save-as-btn'),
             thumbnailStrip: document.getElementById('thumbnail-strip'),
@@ -1748,20 +1758,35 @@
             let availableWidth = window.innerWidth;
             let availableHeight = window.innerHeight;
             let offsetY = 0;
+            let topReserve = 0;
+            let bottomReserve = 0;
 
             if (!isFullscreen) {
                 availableWidth -= 40;
                 availableHeight -= 40;
 
+                if (dom.uiControls) {
+                    const controlsHeight = dom.uiControls.offsetHeight;
+                    if (controlsHeight > 0) {
+                        topReserve = controlsHeight + 30;
+                        availableHeight -= topReserve;
+                    }
+                }
+
                 if (dom.thumbnailStrip) {
                     const reserve = dom.thumbnailStrip.offsetHeight + 30;
                     availableHeight -= reserve;
-                    offsetY = -(reserve / 2);
+                    bottomReserve = reserve;
                 }
+
+                offsetY = (topReserve - bottomReserve) / 2;
             }
 
             const targetW = state.currentStageWidth;
             const targetH = state.currentStageHeight;
+
+            if (availableWidth < 0) availableWidth = 0;
+            if (availableHeight < 0) availableHeight = 0;
 
             const scaleX = availableWidth / targetW;
             const scaleY = availableHeight / targetH;
@@ -2617,6 +2642,10 @@
             }
         }
 
+        let draggingThumbnailIndex = null;
+        let dropTargetThumb = null;
+        let suppressThumbnailClick = false;
+
         function scheduleThumbnailRefresh() {
             if (state.thumbnailRefreshPending) return;
             state.thumbnailRefreshPending = true;
@@ -2624,6 +2653,72 @@
                 state.thumbnailRefreshPending = false;
                 renderThumbnails();
             });
+        }
+
+        function setThumbnailDropTarget(thumb) {
+            if (dropTargetThumb && dropTargetThumb !== thumb) {
+                dropTargetThumb.classList.remove('drop-target');
+            }
+            dropTargetThumb = thumb;
+            if (dropTargetThumb) {
+                dropTargetThumb.classList.add('drop-target');
+            }
+        }
+
+        function clearThumbnailDragState() {
+            if (dropTargetThumb) {
+                dropTargetThumb.classList.remove('drop-target');
+                dropTargetThumb = null;
+            }
+            if (dom.thumbnailStrip) {
+                dom.thumbnailStrip.querySelectorAll('.thumbnail.dragging').forEach((thumb) => {
+                    thumb.classList.remove('dragging');
+                });
+            }
+            draggingThumbnailIndex = null;
+            setTimeout(() => {
+                suppressThumbnailClick = false;
+            }, 0);
+        }
+
+        function handleThumbnailDragStart(e) {
+            const thumb = e.currentTarget;
+            const index = Number.parseInt(thumb.dataset.index, 10);
+            if (!Number.isFinite(index)) return;
+            draggingThumbnailIndex = index;
+            suppressThumbnailClick = true;
+            thumb.classList.add('dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(index));
+            }
+        }
+
+        function handleThumbnailDragOver(e) {
+            if (draggingThumbnailIndex === null) return;
+            e.preventDefault();
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = 'move';
+            }
+            const thumb = e.currentTarget;
+            if (!thumb.classList.contains('dragging')) {
+                setThumbnailDropTarget(thumb);
+            }
+        }
+
+        function handleThumbnailDrop(e) {
+            if (draggingThumbnailIndex === null) return;
+            e.preventDefault();
+            const thumb = e.currentTarget;
+            const targetIndex = Number.parseInt(thumb.dataset.index, 10);
+            if (Number.isFinite(targetIndex) && targetIndex !== draggingThumbnailIndex) {
+                moveSlide(draggingThumbnailIndex, targetIndex);
+            }
+            clearThumbnailDragState();
+        }
+
+        function handleThumbnailDragEnd() {
+            clearThumbnailDragState();
         }
 
         function renderThumbnails() {
@@ -2688,9 +2783,15 @@
                 thumb.appendChild(inner);
                 dom.thumbnailStrip.appendChild(thumb);
                 thumb.addEventListener('click', () => {
+                    if (suppressThumbnailClick) return;
                     state.currentSlideIndex = index;
                     updateSlideVisibility();
                 });
+                thumb.draggable = true;
+                thumb.addEventListener('dragstart', handleThumbnailDragStart);
+                thumb.addEventListener('dragover', handleThumbnailDragOver);
+                thumb.addEventListener('drop', handleThumbnailDrop);
+                thumb.addEventListener('dragend', handleThumbnailDragEnd);
             });
 
             updateThumbnailActive();
@@ -2702,6 +2803,24 @@
             thumbs.forEach((thumb, index) => {
                 thumb.classList.toggle('active', index === state.currentSlideIndex);
             });
+            scrollThumbnailStripToActive();
+        }
+
+        function scrollThumbnailStripToActive() {
+            if (!dom.thumbnailStrip) return;
+            const activeThumb = dom.thumbnailStrip.querySelector('.thumbnail.active');
+            if (!activeThumb) return;
+
+            const strip = dom.thumbnailStrip;
+            const stripWidth = strip.clientWidth;
+            const maxScroll = strip.scrollWidth - stripWidth;
+            if (maxScroll <= 0) return;
+
+            const thumbCenter = activeThumb.offsetLeft + (activeThumb.offsetWidth / 2);
+            let targetScroll = thumbCenter - (stripWidth / 2);
+            if (targetScroll < 0) targetScroll = 0;
+            if (targetScroll > maxScroll) targetScroll = maxScroll;
+            strip.scrollLeft = targetScroll;
         }
 
         function getElementStyleNumber(element, prop, fallback) {
@@ -2888,6 +3007,74 @@
                 state.currentSlideIndex--;
                 updateSlideVisibility();
             }
+        }
+
+        function moveSlide(fromIndex, toIndex) {
+            const stage = dom.stage;
+            if (!stage) return;
+            const slides = refreshSlides();
+            const count = slides.length;
+            if (!Number.isFinite(fromIndex) || !Number.isFinite(toIndex)) return;
+            if (fromIndex < 0 || fromIndex >= count) return;
+            if (toIndex < 0 || toIndex >= count) return;
+            if (fromIndex === toIndex) return;
+
+            const activeSlide = slides[state.currentSlideIndex];
+            const activeSlideId = activeSlide ? ensureSlideId(activeSlide) : null;
+
+            const movingSlide = slides[fromIndex];
+            const targetSlide = slides[toIndex];
+            if (!movingSlide || !targetSlide) return;
+
+            if (fromIndex < toIndex) {
+                stage.insertBefore(movingSlide, targetSlide.nextSibling);
+            } else {
+                stage.insertBefore(movingSlide, targetSlide);
+            }
+
+            const reorderedSlides = refreshSlides();
+            if (activeSlideId) {
+                const newIndex = Array.from(reorderedSlides).findIndex((slide) => slide.dataset.slideId === activeSlideId);
+                if (newIndex >= 0) {
+                    state.currentSlideIndex = newIndex;
+                }
+            }
+
+            reorderSlideModels(reorderedSlides);
+            updateSlideVisibility();
+            showSaveButton();
+        }
+
+        function reorderSlideModels(slides) {
+            ensureModelsReady();
+            if (!slides || !state.documentModel) return;
+
+            const orderedIds = Array.from(slides).map((slide) => ensureSlideId(slide)).filter(Boolean);
+            const byId = new Map();
+            (state.documentModel.slides || []).forEach((slide) => {
+                if (slide && slide.id) byId.set(slide.id, slide);
+            });
+
+            const reordered = [];
+            orderedIds.forEach((slideId, index) => {
+                let model = byId.get(slideId);
+                if (!model) {
+                    const slide = slides[index];
+                    if (slide) {
+                        syncSlideModelFromDom(slide);
+                        model = (state.documentModel.slides || []).find((item) => item && item.id === slideId);
+                    }
+                }
+                if (!model) {
+                    model = { id: slideId, elements: [] };
+                } else {
+                    byId.delete(slideId);
+                }
+                reordered.push(model);
+            });
+
+            byId.forEach((model) => reordered.push(model));
+            state.documentModel.slides = reordered;
         }
 
         function addNewSlide() {
@@ -4183,6 +4370,7 @@
         }
 
         let cursorHideTimer = null;
+        let iframeInteractiveSnapshot = null;
 
         function hideCursorLater() {
             if (cursorHideTimer) clearTimeout(cursorHideTimer);
@@ -4202,6 +4390,7 @@
             if (document.documentElement.requestFullscreen) {
                 document.documentElement.requestFullscreen();
             }
+            iframeInteractiveSnapshot = captureIframeInteractiveState();
             resizeStage();
             hideCursorLater();
         }
@@ -4211,8 +4400,30 @@
             if (document.fullscreenElement) {
                 document.exitFullscreen();
             }
+            restoreIframeInteractiveState();
             resizeStage();
             showCursor();
+        }
+
+        function captureIframeInteractiveState() {
+            const snapshot = new Set();
+            document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                const id = ensureElementId(wrapper);
+                if (wrapper.classList.contains('iframe-interactive')) {
+                    snapshot.add(id);
+                }
+                setIframeInteractive(wrapper, false);
+            });
+            return snapshot;
+        }
+
+        function restoreIframeInteractiveState() {
+            if (!iframeInteractiveSnapshot) return;
+            document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                const id = ensureElementId(wrapper);
+                setIframeInteractive(wrapper, iframeInteractiveSnapshot.has(id));
+            });
+            iframeInteractiveSnapshot = null;
         }
 
         document.addEventListener('mousemove', () => {
@@ -4224,6 +4435,7 @@
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 document.body.classList.remove('is-fullscreen');
+                restoreIframeInteractiveState();
                 showCursor();
             }
             resizeStage();

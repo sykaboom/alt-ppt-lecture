@@ -53,20 +53,35 @@
             let availableWidth = window.innerWidth;
             let availableHeight = window.innerHeight;
             let offsetY = 0;
+            let topReserve = 0;
+            let bottomReserve = 0;
 
             if (!isFullscreen) {
                 availableWidth -= 40;
                 availableHeight -= 40;
 
+                if (dom.uiControls) {
+                    const controlsHeight = dom.uiControls.offsetHeight;
+                    if (controlsHeight > 0) {
+                        topReserve = controlsHeight + 30;
+                        availableHeight -= topReserve;
+                    }
+                }
+
                 if (dom.thumbnailStrip) {
                     const reserve = dom.thumbnailStrip.offsetHeight + 30;
                     availableHeight -= reserve;
-                    offsetY = -(reserve / 2);
+                    bottomReserve = reserve;
                 }
+
+                offsetY = (topReserve - bottomReserve) / 2;
             }
 
             const targetW = state.currentStageWidth;
             const targetH = state.currentStageHeight;
+
+            if (availableWidth < 0) availableWidth = 0;
+            if (availableHeight < 0) availableHeight = 0;
 
             const scaleX = availableWidth / targetW;
             const scaleY = availableHeight / targetH;

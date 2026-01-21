@@ -26,6 +26,74 @@
             }
         }
 
+        function moveSlide(fromIndex, toIndex) {
+            const stage = dom.stage;
+            if (!stage) return;
+            const slides = refreshSlides();
+            const count = slides.length;
+            if (!Number.isFinite(fromIndex) || !Number.isFinite(toIndex)) return;
+            if (fromIndex < 0 || fromIndex >= count) return;
+            if (toIndex < 0 || toIndex >= count) return;
+            if (fromIndex === toIndex) return;
+
+            const activeSlide = slides[state.currentSlideIndex];
+            const activeSlideId = activeSlide ? ensureSlideId(activeSlide) : null;
+
+            const movingSlide = slides[fromIndex];
+            const targetSlide = slides[toIndex];
+            if (!movingSlide || !targetSlide) return;
+
+            if (fromIndex < toIndex) {
+                stage.insertBefore(movingSlide, targetSlide.nextSibling);
+            } else {
+                stage.insertBefore(movingSlide, targetSlide);
+            }
+
+            const reorderedSlides = refreshSlides();
+            if (activeSlideId) {
+                const newIndex = Array.from(reorderedSlides).findIndex((slide) => slide.dataset.slideId === activeSlideId);
+                if (newIndex >= 0) {
+                    state.currentSlideIndex = newIndex;
+                }
+            }
+
+            reorderSlideModels(reorderedSlides);
+            updateSlideVisibility();
+            showSaveButton();
+        }
+
+        function reorderSlideModels(slides) {
+            ensureModelsReady();
+            if (!slides || !state.documentModel) return;
+
+            const orderedIds = Array.from(slides).map((slide) => ensureSlideId(slide)).filter(Boolean);
+            const byId = new Map();
+            (state.documentModel.slides || []).forEach((slide) => {
+                if (slide && slide.id) byId.set(slide.id, slide);
+            });
+
+            const reordered = [];
+            orderedIds.forEach((slideId, index) => {
+                let model = byId.get(slideId);
+                if (!model) {
+                    const slide = slides[index];
+                    if (slide) {
+                        syncSlideModelFromDom(slide);
+                        model = (state.documentModel.slides || []).find((item) => item && item.id === slideId);
+                    }
+                }
+                if (!model) {
+                    model = { id: slideId, elements: [] };
+                } else {
+                    byId.delete(slideId);
+                }
+                reordered.push(model);
+            });
+
+            byId.forEach((model) => reordered.push(model));
+            state.documentModel.slides = reordered;
+        }
+
         function addNewSlide() {
             const stage = dom.stage;
             if (!stage) return;

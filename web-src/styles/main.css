@@ -389,6 +389,15 @@
             box-shadow: 0 0 0 2px rgba(50,163,255,0.4), 0 6px 12px rgba(0,0,0,0.5);
         }
 
+        .thumbnail.dragging {
+            opacity: 0.5;
+        }
+
+        .thumbnail.drop-target {
+            outline: 2px dashed rgba(255,255,255,0.8);
+            outline-offset: 3px;
+        }
+
         .thumbnail-inner {
             /* 썸네일 내부도 JS에서 크기 조절 예정 */
             width: 1280px;

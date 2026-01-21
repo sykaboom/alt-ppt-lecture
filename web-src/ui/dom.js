@@ -2,6 +2,7 @@
             indicator: document.getElementById('page-indicator'),
             navPrev: document.getElementById('nav-prev'),
             navNext: document.getElementById('nav-next'),
+            uiControls: document.getElementById('ui-controls'),
             saveBtn: document.getElementById('save-btn'),
             saveAsBtn: document.getElementById('save-as-btn'),
             thumbnailStrip: document.getElementById('thumbnail-strip'),

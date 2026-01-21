@@ -1,4 +1,5 @@
         let cursorHideTimer = null;
+        let iframeInteractiveSnapshot = null;
 
         function hideCursorLater() {
             if (cursorHideTimer) clearTimeout(cursorHideTimer);
@@ -18,6 +19,7 @@
             if (document.documentElement.requestFullscreen) {
                 document.documentElement.requestFullscreen();
             }
+            iframeInteractiveSnapshot = captureIframeInteractiveState();
             resizeStage();
             hideCursorLater();
         }
@@ -27,8 +29,30 @@
             if (document.fullscreenElement) {
                 document.exitFullscreen();
             }
+            restoreIframeInteractiveState();
             resizeStage();
             showCursor();
+        }
+
+        function captureIframeInteractiveState() {
+            const snapshot = new Set();
+            document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                const id = ensureElementId(wrapper);
+                if (wrapper.classList.contains('iframe-interactive')) {
+                    snapshot.add(id);
+                }
+                setIframeInteractive(wrapper, false);
+            });
+            return snapshot;
+        }
+
+        function restoreIframeInteractiveState() {
+            if (!iframeInteractiveSnapshot) return;
+            document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                const id = ensureElementId(wrapper);
+                setIframeInteractive(wrapper, iframeInteractiveSnapshot.has(id));
+            });
+            iframeInteractiveSnapshot = null;
         }
 
         document.addEventListener('mousemove', () => {
@@ -40,6 +64,7 @@
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 document.body.classList.remove('is-fullscreen');
+                restoreIframeInteractiveState();
                 showCursor();
             }
             resizeStage();

@@ -1,3 +1,7 @@
+        let draggingThumbnailIndex = null;
+        let dropTargetThumb = null;
+        let suppressThumbnailClick = false;
+
         function scheduleThumbnailRefresh() {
             if (state.thumbnailRefreshPending) return;
             state.thumbnailRefreshPending = true;
@@ -5,6 +9,72 @@
                 state.thumbnailRefreshPending = false;
                 renderThumbnails();
             });
+        }
+
+        function setThumbnailDropTarget(thumb) {
+            if (dropTargetThumb && dropTargetThumb !== thumb) {
+                dropTargetThumb.classList.remove('drop-target');
+            }
+            dropTargetThumb = thumb;
+            if (dropTargetThumb) {
+                dropTargetThumb.classList.add('drop-target');
+            }
+        }
+
+        function clearThumbnailDragState() {
+            if (dropTargetThumb) {
+                dropTargetThumb.classList.remove('drop-target');
+                dropTargetThumb = null;
+            }
+            if (dom.thumbnailStrip) {
+                dom.thumbnailStrip.querySelectorAll('.thumbnail.dragging').forEach((thumb) => {
+                    thumb.classList.remove('dragging');
+                });
+            }
+            draggingThumbnailIndex = null;
+            setTimeout(() => {
+                suppressThumbnailClick = false;
+            }, 0);
+        }
+
+        function handleThumbnailDragStart(e) {
+            const thumb = e.currentTarget;
+            const index = Number.parseInt(thumb.dataset.index, 10);
+            if (!Number.isFinite(index)) return;
+            draggingThumbnailIndex = index;
+            suppressThumbnailClick = true;
+            thumb.classList.add('dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(index));
+            }
+        }
+
+        function handleThumbnailDragOver(e) {
+            if (draggingThumbnailIndex === null) return;
+            e.preventDefault();
+            if (e.dataTransfer) {
+                e.dataTransfer.dropEffect = 'move';
+            }
+            const thumb = e.currentTarget;
+            if (!thumb.classList.contains('dragging')) {
+                setThumbnailDropTarget(thumb);
+            }
+        }
+
+        function handleThumbnailDrop(e) {
+            if (draggingThumbnailIndex === null) return;
+            e.preventDefault();
+            const thumb = e.currentTarget;
+            const targetIndex = Number.parseInt(thumb.dataset.index, 10);
+            if (Number.isFinite(targetIndex) && targetIndex !== draggingThumbnailIndex) {
+                moveSlide(draggingThumbnailIndex, targetIndex);
+            }
+            clearThumbnailDragState();
+        }
+
+        function handleThumbnailDragEnd() {
+            clearThumbnailDragState();
         }
 
         function renderThumbnails() {
@@ -69,9 +139,15 @@
                 thumb.appendChild(inner);
                 dom.thumbnailStrip.appendChild(thumb);
                 thumb.addEventListener('click', () => {
+                    if (suppressThumbnailClick) return;
                     state.currentSlideIndex = index;
                     updateSlideVisibility();
                 });
+                thumb.draggable = true;
+                thumb.addEventListener('dragstart', handleThumbnailDragStart);
+                thumb.addEventListener('dragover', handleThumbnailDragOver);
+                thumb.addEventListener('drop', handleThumbnailDrop);
+                thumb.addEventListener('dragend', handleThumbnailDragEnd);
             });
 
             updateThumbnailActive();
@@ -83,4 +159,22 @@
             thumbs.forEach((thumb, index) => {
                 thumb.classList.toggle('active', index === state.currentSlideIndex);
             });
+            scrollThumbnailStripToActive();
+        }
+
+        function scrollThumbnailStripToActive() {
+            if (!dom.thumbnailStrip) return;
+            const activeThumb = dom.thumbnailStrip.querySelector('.thumbnail.active');
+            if (!activeThumb) return;
+
+            const strip = dom.thumbnailStrip;
+            const stripWidth = strip.clientWidth;
+            const maxScroll = strip.scrollWidth - stripWidth;
+            if (maxScroll <= 0) return;
+
+            const thumbCenter = activeThumb.offsetLeft + (activeThumb.offsetWidth / 2);
+            let targetScroll = thumbCenter - (stripWidth / 2);
+            if (targetScroll < 0) targetScroll = 0;
+            if (targetScroll > maxScroll) targetScroll = maxScroll;
+            strip.scrollLeft = targetScroll;
         }

@@ -16,5 +16,9 @@
       <Link>player.html</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\\..\\installer\\MicrosoftEdgeWebView2Setup.exe" Condition="Exists('..\\..\\installer\\MicrosoftEdgeWebView2Setup.exe')">
+      <Link>MicrosoftEdgeWebView2Setup.exe</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

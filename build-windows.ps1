@@ -23,6 +23,22 @@ if (-not (Test-Path $webBuildScript)) {
 Write-Host "Building web player..."
 & $webBuildScript
 
+$installerDir = Join-Path $root "installer"
+$webviewInstaller = Join-Path $installerDir "MicrosoftEdgeWebView2Setup.exe"
+$webviewUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+if (-not (Test-Path $installerDir)) {
+    New-Item -ItemType Directory -Path $installerDir | Out-Null
+}
+if (-not (Test-Path $webviewInstaller)) {
+    Write-Host "WebView2 installer not found. Downloading bootstrapper..."
+    try {
+        Invoke-WebRequest -Uri $webviewUrl -OutFile $webviewInstaller -UseBasicParsing
+        Write-Host "Downloaded WebView2 installer -> $webviewInstaller"
+    } catch {
+        Write-Warning "Failed to download WebView2 installer. The app will prompt users to install it on first run."
+    }
+}
+
 $distRoot = Join-Path $root "dist"
 $distDir = Join-Path $distRoot "AltPptPlayer"
 if (Test-Path $distRoot) {
