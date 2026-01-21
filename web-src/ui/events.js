@@ -106,6 +106,14 @@
                 const isFormField = e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
                 if (isFormField) return;
 
+                if (e.key === 'F5' || e.code === 'F5') {
+                    const reloaded = reloadEmbeddedHtml();
+                    if (reloaded) {
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
                 if (e.code === 'Space' || e.key === ' ') {
                     if (!state.isSpacePressed) {
                         state.isSpacePressed = true;

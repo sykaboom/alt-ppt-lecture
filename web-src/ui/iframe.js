@@ -197,6 +197,47 @@
             setIframeInteractive(wrapper, wrapper.classList.contains('iframe-interactive'));
         }
 
+        function reloadIframeWrapper(wrapper) {
+            if (!wrapper) return false;
+            const iframe = wrapper.querySelector('iframe');
+            if (!iframe) return false;
+
+            const assetPath = iframe.dataset.filename || normalizeAssetPath(iframe.getAttribute('src'));
+            if (assetPath && state.packageFiles.has(assetPath)) {
+                const blob = state.packageFiles.get(assetPath);
+                if (!blob) return false;
+                const objectUrl = URL.createObjectURL(blob);
+                iframe.src = objectUrl;
+                iframe.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true });
+                iframe.addEventListener('error', () => URL.revokeObjectURL(objectUrl), { once: true });
+                return true;
+            }
+
+            const currentSrc = iframe.getAttribute('src') || '';
+            if (!currentSrc) return false;
+            iframe.src = 'about:blank';
+            setTimeout(() => {
+                iframe.src = currentSrc;
+            }, 0);
+            return true;
+        }
+
+        function reloadEmbeddedHtml() {
+            if (state.selectedImage && state.selectedImage.classList.contains('draggable-iframe')) {
+                return reloadIframeWrapper(state.selectedImage);
+            }
+
+            const activeSlide = getActiveSlide();
+            if (!activeSlide) return false;
+            let reloaded = false;
+            activeSlide.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
+                if (reloadIframeWrapper(wrapper)) {
+                    reloaded = true;
+                }
+            });
+            return reloaded;
+        }
+
         function initializeIframeControls() {
             document.querySelectorAll('.draggable-iframe').forEach((wrapper) => {
                 ensureIframeControls(wrapper);
